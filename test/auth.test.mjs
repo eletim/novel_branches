@@ -10,7 +10,7 @@ import { createApp } from '../src/server.mjs';
 
 const secret = 'test-client-secret-with-32-characters-minimum';
 const json = (res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
-async function fixture() {
+async function fixture({internalRouting=false} = {}) {
   const {publicKey,privateKey} = await generateKeyPair('RS256');
   const jwk = {...await exportJWK(publicKey),kid:'test-key',alg:'RS256',use:'sig'};
   const grants = new Map();
@@ -33,9 +33,10 @@ async function fixture() {
     json(res,404,{error:'not_found'});
   });
   provider.listen(0,'127.0.0.1');await once(provider,'listening');
-  issuer=`http://127.0.0.1:${provider.address().port}/realms/novel-branches`;
+  const internalIssuer=`http://127.0.0.1:${provider.address().port}/realms/novel-branches`;
+  issuer=internalRouting ? 'https://novels.example.test/id/realms/novel-branches' : internalIssuer;
   const store = new Store(':memory:');
-  const auth = {mode:'oidc',origin:'https://novels.example.test',issuer,clientId:'novel-web',clientSecret:secret,memberRole:'novel-member',mcpAudience:'novel-mcp',allowHttp:true};
+  const auth = {mode:'oidc',origin:'https://novels.example.test',issuer,clientId:'novel-web',clientSecret:secret,memberRole:'novel-member',mcpAudience:'novel-mcp',allowHttp:!internalRouting,...(internalRouting?{internalIssuer}:{})};
   const server = createApp({store,auth,origin:auth.origin,secureCookies:true,mcpToken:'legacy-token'});
   server.listen(0,'127.0.0.1');await once(server,'listening');
   const base=`http://127.0.0.1:${server.address().port}`;
@@ -141,5 +142,14 @@ test('署名付きbackchannel logoutで対象セッションだけを即時失�
     assert.equal((await f.request('/api/stories',{cookie:cookie1})).status,401);
     assert.equal((await f.request('/api/stories',{cookie:cookie2})).status,200);
     const invalid=await f.request('/auth/backchannel-logout',{method:'POST',raw:'logout_token=bad',headers:{'Content-Type':'application/x-www-form-urlencoded'}});assert.equal(invalid.status,400);
+  }finally{await f.close();}
+});
+
+test('公開issuerを検証したまま、discovery・コード交換・JWKSを内部接続へ転送できる',async()=>{
+  const f=await fixture({internalRouting:true});try{
+    const response=await f.finish(await f.start());assert.equal(response.status,302);
+    const cookie=session(response);assert.ok((await (await f.request('/api/me',{cookie})).json()).user);
+    const token=await f.sign({});
+    const mcp=await f.request('/mcp',{method:'POST',data:{jsonrpc:'2.0',id:1,method:'tools/list'},headers:{Authorization:'Bearer '+token,Accept:'application/json, text/event-stream'}});assert.equal(mcp.status,200);
   }finally{await f.close();}
 });

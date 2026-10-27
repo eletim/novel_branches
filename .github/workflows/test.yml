@@ -29,6 +29,9 @@ jobs:
           docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml up -d --build
       - name: Real Keycloak and Nginx integration
         run: NODE_EXTRA_CA_CERTS="$PWD/deploy/.test/tls/fullchain.pem" npm run test:stack
+      - name: Stack diagnostics on failure
+        if: failure()
+        run: docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml logs --tail=100 app keycloak nginx
       - name: Stop and remove disposable test data
         if: always()
         run: docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml down -v --remove-orphans

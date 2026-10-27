@@ -1,22 +1,28 @@
-# 作業状態 — v0.1.0
+# 作業状態 — v0.2.0
 
 ## 実装済み
 
-投稿、続話、任意の話からの分岐、入れ子の分岐、共通話を含む読書順、話の親子関係表示、各話へのグッド、新着/グッド順、検索/ページ送り、ログイン/ログアウト、ローカル下書き、SQLite保存、閲覧用HTTP MCP/stdio、Docker構成、CI。
+- 投稿、続話、任意の話からの分岐、入れ子の分岐、読書順、グッド、検索、下書き、永続化。
+- 公開用Keycloak認証（Authorization Code + PKCE）、state/nonce/署名/issuer/audience/期限/参加ロールの検証。
+- ローカル用ログインと公開用OIDCの切り替え。公開用ではローカル認証・セッションを無効化。
+- Secure / HttpOnly / SameSite / __Host-cookie、Originの検証、Keycloakログアウトと署名付きbackchannel logout。
+- 公開用MCPのKeycloakアクセストークン検証（署名・issuer・audience・scope・参加ロール）。
+- Nginxだけを外部公開する独立Compose、Keycloak用PostgreSQL、HTTPS・管理経路の非公開化。
+- 旧DBからの追加型移行、起動手順、CI、使い捨てlocalhostスタックの統合テスト。
 
 ## 検証
 
-`npm test` で8件成功。分岐構造、投稿権限、競合、投票、永続化、HTTPでの2人利用、HTTP MCP、stdioの通信を確認。
+ローカルの `npm test` は19件成功。`npm audit --omit=dev --audit-level=high` は脆弱性0件。
 
-ログイン画面を実ブラウザで表示し、レイアウトを確認しました。ログイン後の操作はHTTP APIの統合テストで検証し、ブラウザでの一連の操作は未確認です。
+認証テストは実際の `openid-client` / `jose` とテスト用署名鍵・HTTP OIDCプロバイダーを使い、正常系と不正な認証情報の拒否を検証しています。公開issuerを保った内部接続への転送も確認しました。
 
-## まだ行っていないこと
+Dockerを利用できるGitHub Actionsでは、Keycloak・PostgreSQL・Nginx・アプリをlocalhost上に起動する `keycloak-nginx` ジョブを追加しています。最終結果はPRのCIを確認してください。通常テストとこのジョブは別です。
 
-- 利用サーバーへの常設配置、独自ドメイン/HTTPSの設定
-- ChatGPT側へのMCP接続の登録と実読書
-- Dockerの実ビルド（実行環境にDockerなし）
-- 投稿済み本文の編集/削除UI、一般公開向けの登録機能
+## 未実施
 
-## 次に決めること
+- ユーザーの公開サーバーへの配置、DNSや実証明書の設定（依頼により実施しない）。
+- 実際のChatGPT環境へのOAuth接続設定・登録・読書確認。
+- 公開用MCPのOAuth自動発見・動的クライアント登録（現在はBearerトークン検証まで）。
+- 投稿済み本文の編集/削除UI、一般公開向けの登録機能。
 
-常設するサーバーの場所。配置後、2〜3人分のアカウントを発行し、実際のChatGPT環境とMCPを接続する。
+公開用設定は [public-server.md](public-server.md) を参照してください。

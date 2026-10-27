@@ -11,7 +11,9 @@ const realm=JSON.parse(readFileSync('deploy/keycloak/novel-branches-realm.json',
 realm.users=Object.entries(passwords).map(([name,password])=>({username:'test-'+name,enabled:true,email:`${name}@example.test`,emailVerified:true,firstName:'Test',lastName:name,credentials:[{type:'password',value:password,temporary:false}],realmRoles:name==='outsider'?[]:['novel-member'],requiredActions:[]}));
 // Password grant is enabled ONLY in this ignored test fixture, never in the shipped realm.
 realm.clients.find(c=>c.clientId==='novel-mcp').directAccessGrantsEnabled=true;
-writeFileSync(resolve(directory,'test-realm.json'),JSON.stringify(realm),{mode:0o600});
+// Readable by the non-root Keycloak UID inside the container. Test credentials only.
+writeFileSync(resolve(directory,'test-realm.json'),JSON.stringify(realm),{mode:0o644});
+chmodSync(resolve(directory,'test-realm.json'),0o644);
 execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','2','-keyout',resolve(tls,'privkey.pem'),'-out',resolve(tls,'fullchain.pem'),'-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],{stdio:'ignore'});
 chmodSync(resolve(tls,'privkey.pem'),0o600);
 const env={PUBLIC_HOST:'localhost',APP_ORIGIN:'https://localhost:8443',TLS_DIR:tls,HTTP_BIND:'127.0.0.1',HTTPS_BIND:'127.0.0.1',HTTP_PORT:'8088',HTTPS_PORT:'8443',OIDC_CLIENT_SECRET:secret(),KC_DB_PASSWORD:secret(),KC_ADMIN_PASSWORD:secret(),KC_ADMIN_USER:'test-admin',KEYCLOAK_REALM_FILE:resolve(directory,'test-realm.json'),TEST_MEMBER_PASSWORD:passwords.member,TEST_OTHER_PASSWORD:passwords.other,TEST_OUTSIDER_PASSWORD:passwords.outsider};
