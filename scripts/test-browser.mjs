@@ -14,7 +14,7 @@ const a=await context.newPage();
 const bctx=await browser.newContext({viewport:{width:1280,height:900}}),b=await bctx.newPage();
 async function login(p,name){await p.goto(origin);await p.locator('.login a').click();await p.locator('#username').fill('test-'+name);await p.locator('#password').fill(process.env['TEST_'+name.toUpperCase()+'_PASSWORD']);await p.locator('#kc-login').click();await p.locator('#write').waitFor();}
 async function go(p,hash){await p.goto(origin+'/'+hash);await p.locator(hash.startsWith('#chapter')?'.reader-body':hash.startsWith('#story')?'.branch-list':'.cards').waitFor();}
-async function post(p,values){for(const [key,value] of Object.entries(values))await p.locator('#edit-'+key).fill(value);await p.locator('#edit-form button[type=submit]').click();await p.locator('#editor').waitFor({state:'hidden'});await p.locator('.reader-body').waitFor();return Number(new URL(p.url()).hash.match(/chapter\/(\d+)/)[1]);}
+async function post(p,values){for(const [key,value] of Object.entries(values))await p.locator('#edit-'+key).fill(value);await p.locator('#edit-form button[type=submit]').click();await p.locator('#editor').waitFor({state:'hidden'});await p.locator('.reader-heading h1').filter({hasText:values.chapterTitle||values.title}).waitFor();return Number(new URL(p.url()).hash.match(/chapter\/(\d+)/)[1]);}
 async function api(p,path,method='GET',data){return p.evaluate(async({path,method,data})=>{const r=await fetch('/api'+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});return {status:r.status,data:await r.json()};},{path,method,data});}
 const stamp=Date.now(),title='ブラウザ検証 '+stamp;
 try{
@@ -49,7 +49,7 @@ try{
  const cdp=await context.newCDPSession(a);await cdp.send('DOM.enable');await cdp.send('CSS.enable');const dom=await cdp.send('DOM.getDocument');const node=await cdp.send('DOM.querySelector',{nodeId:dom.root.nodeId,selector:'.reader-body'});const fonts=await cdp.send('CSS.getPlatformFontsForNode',{nodeId:node.nodeId});
  await a.setViewportSize({width:375,height:812});assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await a.screenshot({path:out+'/reader-mobile.png',fullPage:true});
  await go(a,'#');assert.notEqual(await a.evaluate(()=>getComputedStyle(document.body).backgroundColor),'rgb(237, 247, 255)');assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
- await a.locator('[name=q]').fill(title);await a.locator('#search button').click();await a.locator('.card h3').filter({hasText:title}).waitFor();assert.equal(await a.locator('.card').count(),1);
+ await a.locator('[name=q]').fill(title);await Promise.all([a.waitForResponse(r=>new URL(r.url()).pathname==='/api/stories' && new URL(r.url()).searchParams.get('q')===title),a.locator('#search button').click()]);await a.locator('.card h3').filter({hasText:title}).waitFor();assert.equal(await a.locator('.card').count(),1);
  await a.locator('[name=sort]').selectOption('popular');await a.locator('#search button').click();await a.waitForURL(/sort=popular/);
  for(const sort of ['new','popular']){
   await go(a,'#?sort='+sort);const expected=(await api(a,'/stories?sort='+sort+'&limit=12')).data.stories.map(s=>s.id);assert.deepEqual(await a.locator('.card').evaluateAll(xs=>xs.map(x=>Number(x.hash.split('/')[1]))),expected);
