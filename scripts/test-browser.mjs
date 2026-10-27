@@ -2,9 +2,11 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
-process.loadEnvFile('deploy/.test/stack.env');
+const config=process.env.TEST_STACK_ENV||'deploy/.test/stack.env';
+assert.ok(['deploy/.test/stack.env','deploy/.test/vpn.env'].includes(config));
+process.loadEnvFile(config);
 const origin=process.env.APP_ORIGIN;
-assert.equal(origin,'https://localhost:8443');
+assert.ok(origin==='https://localhost:8443'||(config==='deploy/.test/vpn.env' && /^https:\/\/[a-z0-9.-]+\.ts\.net:8443$/.test(origin)));
 const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/usr/bin/google-chrome',headless:true});
 const out='deploy/.test/evidence';mkdirSync(out,{recursive:true});
 const errors=[];

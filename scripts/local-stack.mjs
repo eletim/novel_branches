@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 process.chdir(fileURLToPath(new URL('..',import.meta.url)));
 const command=process.argv[2]||'status';
+if(existsSync('deploy/.test/vpn-migration.json'))throw Error('This stack uses VPN authentication now. Use npm run vpn -- up/stop/restart/status.');
 if(!['up','stop','restart','status'].includes(command))throw Error('Use up, stop, restart or status.');
 if(!existsSync('deploy/.test/stack.env')){
  const existing=spawnSync('docker',['volume','inspect','novel-branches-local_keycloak-data'],{stdio:'ignore'});

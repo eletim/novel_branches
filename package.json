@@ -17,7 +17,8 @@
     "test:stack": "node scripts/test-stack.mjs",
     "local": "node scripts/local-stack.mjs",
     "test:browser": "node scripts/test-browser.mjs",
-    "test:expiry": "node scripts/test-expiry.mjs"
+    "test:expiry": "node scripts/test-expiry.mjs",
+    "vpn": "node scripts/vpn-stack.mjs"
   },
   "dependencies": {
     "jose": "6.2.13",

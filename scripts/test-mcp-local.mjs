@@ -2,8 +2,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-process.loadEnvFile('deploy/.test/stack.env');
-const origin=process.env.APP_ORIGIN;assert.equal(origin,'https://localhost:8443');
+const config=process.env.TEST_STACK_ENV||'deploy/.test/stack.env';
+assert.ok(['deploy/.test/stack.env','deploy/.test/vpn.env'].includes(config));
+process.loadEnvFile(config);
+const origin=process.env.APP_ORIGIN;assert.ok(origin==='https://localhost:8443'||(config==='deploy/.test/vpn.env' && /^https:\/\/[a-z0-9.-]+\.ts\.net:8443$/.test(origin)));
 const evidence=JSON.parse(readFileSync('deploy/.test/evidence/browser.json'));
 async function token(name,scope='openid novels:read'){
  const r=await fetch(origin+'/id/realms/novel-branches/protocol/openid-connect/token',{method:'POST',body:new URLSearchParams({grant_type:'password',client_id:'novel-mcp',username:'test-'+name,password:process.env['TEST_'+name.toUpperCase()+'_PASSWORD'],scope})});assert.equal(r.status,200);return (await r.json()).access_token;

@@ -1,5 +1,7 @@
 # localhost導入と実操作検証
 
+追記：このPCはユーザーの追加依頼でVPN用URLへ移行済みです。現在の起動・停止には [VPN起動手順](vpn.md) を使用してください。以下はlocalhost検証時の記録です。
+
 ## 起動とアカウント
 
 2026-10-27、Ubuntu 22.04 / Docker Compose 2.32.1 / Node.js 24.22.1 / Google Chrome 131で検証。PR #1は未マージ、mainは77b232f。未コミット変更がないことを確認して、PRブランチ `feat/keycloak-nginx` の18291a3を基準に作業した。

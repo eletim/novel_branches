@@ -12,6 +12,8 @@
 - 下書きをブラウザ内に自動保存（ユーザー・投稿先ごと）
 - 同じSQLiteデータを読む閲覧専用MCP：Streamable HTTPとstdio
 
+既存Tailscale内で利用する場合は [VPN起動手順](docs/vpn.md) を参照してください。
+
 ## Keycloak・Nginxを含むローカル起動
 
 継続利用するlocalhost専用環境は [docs/local-validation.md](docs/local-validation.md) を参照してください。`npm run local -- up` でHTTPS・Keycloak・DBを起動し、設定とデータを再利用します。
