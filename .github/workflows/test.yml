@@ -10,4 +10,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - run: npm ci
       - run: npm test
+
+  keycloak-nginx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: node scripts/prepare-stack-test.mjs
+      - name: Validate and build isolated stack
+        run: |
+          docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml config --quiet
+          docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml up -d --build
+      - name: Real Keycloak and Nginx integration
+        run: NODE_EXTRA_CA_CERTS="$PWD/deploy/.test/tls/fullchain.pem" npm run test:stack
+      - name: Install browser and trust localhost certificate
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y libnss3-tools
+          mkdir -p "$HOME/.pki/nssdb"
+          certutil -N --empty-password -d "sql:$HOME/.pki/nssdb"
+          certutil -A -d "sql:$HOME/.pki/nssdb" -n novel-branches-local -t 'C,,' -i deploy/.test/tls/fullchain.pem
+      - name: Browser collaboration and recovery regression
+        run: CHROME_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")" npm run test:browser
+      - name: Verify access logs omit authentication queries
+        run: |
+          docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml logs nginx | python3 -c "import sys; logs=sys.stdin.read(); assert '/auth/callback?' not in logs; assert 'id_token_hint=' not in logs; print('Access log query check passed')"
+      - name: Stack diagnostics on failure
+        if: failure()
+        run: docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml logs --tail=100 app keycloak nginx
+      - name: Stop and remove disposable test data
+        if: always()
+        run: docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml down -v --remove-orphans

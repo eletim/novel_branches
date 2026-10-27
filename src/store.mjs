@@ -36,7 +36,15 @@ export class Store {
       CREATE INDEX IF NOT EXISTS branches_story ON branches(story_id);
       CREATE INDEX IF NOT EXISTS chapters_parent ON chapters(parent_id);
       CREATE INDEX IF NOT EXISTS likes_chapter ON likes(chapter_id);
-      PRAGMA user_version=1;`);
+      CREATE TABLE IF NOT EXISTS oidc_identities(issuer TEXT NOT NULL,subject TEXT NOT NULL,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),PRIMARY KEY(issuer,subject));
+      CREATE TABLE IF NOT EXISTS oidc_logins(state_hash TEXT PRIMARY KEY,browser_hash TEXT NOT NULL,nonce TEXT NOT NULL,verifier TEXT NOT NULL,expires INTEGER NOT NULL);
+      PRAGMA user_version=2;`);
+    // Additive migration preserves existing users, stories, sessions and ownership.
+    const columns = new Set(this.db.prepare('PRAGMA table_info(sessions)').all().map(c=>c.name));
+    for (const [name, type] of Object.entries({auth_type:"TEXT NOT NULL DEFAULT 'local'",issuer:'TEXT',subject:'TEXT',sid:'TEXT',id_token:'TEXT'})) {
+      if (!columns.has(name)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${type}`);
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS oidc_sessions ON sessions(issuer,sid,subject)');
   }
   close() { this.db.close(); }
   transaction(fn) {
@@ -57,15 +65,54 @@ export class Store {
     const dummy = '0123456789abcdef0123456789abcdef:' + '0'.repeat(128);
     const valid = passwordMatches(password, user?.password_hash || dummy);
     if (!user || !valid) throw new AppError('ユーザー名またはパスワードが違います。',401);
+    return this.createSession(user.id);
+  }
+  createSession(userId, { lifetimeMs = 7*86400000, authType = 'local', issuer = null, subject = null, sid = null, idToken = null } = {}) {
     const token = randomBytes(32).toString('hex');
     this.db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
-    this.db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(tokenHash(token), user.id, Date.now()+7*86400000);
-    return { token, user: this.user(user.id) };
+    this.db.prepare('INSERT INTO sessions(token_hash,user_id,expires,auth_type,issuer,subject,sid,id_token) VALUES(?,?,?,?,?,?,?,?)').run(tokenHash(token),userId,Date.now()+lifetimeMs,authType,issuer,subject,sid,idToken);
+    return {token,user:this.user(userId)};
   }
-  session(token) {
-    if (!token) return null;
-    const row = this.db.prepare('SELECT user_id FROM sessions WHERE token_hash=? AND expires>?').get(tokenHash(token), Date.now());
-    return row ? this.user(row.user_id) : null;
+  sessionDetails(token) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return null;
+    return this.db.prepare('SELECT * FROM sessions WHERE token_hash=? AND expires>?').get(tokenHash(token),Date.now());
+  }
+  session(token, authType = 'local') {
+    const row = this.sessionDetails(token);
+    return row && row.auth_type === authType ? this.user(row.user_id) : null;
+  }
+  oidcUser(issuer, subject, displayName) {
+    if (typeof subject !== 'string' || !subject || subject.length > 512) throw new AppError('ユーザー識別子が不正です。',401);
+    const name = text(String(displayName).slice(0,60),'表示名',60);
+    return this.transaction(()=>{
+      const identity = this.db.prepare('SELECT user_id FROM oidc_identities WHERE issuer=? AND subject=?').get(issuer,subject);
+      if (identity) {
+        this.db.prepare('UPDATE users SET display_name=? WHERE id=?').run(name,identity.user_id);
+        return this.user(identity.user_id);
+      }
+      // Never merge users based on email or a mutable display name.
+      const username = 'oidc_'+randomBytes(16).toString('hex');
+      const user = this.addUser(username,name,randomBytes(32).toString('hex'));
+      this.db.prepare('INSERT INTO oidc_identities VALUES(?,?,?)').run(issuer,subject,user.id);
+      return user;
+    });
+  }
+  saveOidcLogin({state,browser,nonce,verifier}) {
+    this.db.prepare('DELETE FROM oidc_logins WHERE expires<?').run(Date.now());
+    if (this.db.prepare('SELECT COUNT(*) n FROM oidc_logins').get().n >= 1000) throw new AppError('ログインが混み合っています。少し待って再試行してください。',429);
+    this.db.prepare('INSERT INTO oidc_logins VALUES(?,?,?,?,?)').run(tokenHash(state),tokenHash(browser),nonce,verifier,Date.now()+600000);
+  }
+  consumeOidcLogin(state,browser) {
+    if (typeof state !== 'string' || state.length > 256 || typeof browser !== 'string' || browser.length > 256) return null;
+    return this.transaction(()=>{
+      const login = this.db.prepare('SELECT nonce,verifier FROM oidc_logins WHERE state_hash=? AND browser_hash=? AND expires>?').get(tokenHash(state),tokenHash(browser),Date.now());
+      if (login) this.db.prepare('DELETE FROM oidc_logins WHERE state_hash=?').run(tokenHash(state));
+      return login;
+    });
+  }
+  revokeOidcSessions(issuer,sid,subject) {
+    if (sid) this.db.prepare('DELETE FROM sessions WHERE auth_type=? AND issuer=? AND sid=?').run('oidc',issuer,sid);
+    else if (subject) this.db.prepare('DELETE FROM sessions WHERE auth_type=? AND issuer=? AND subject=?').run('oidc',issuer,subject);
   }
   logout(token) { if (token) this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash(token)); }
   listStories({ query = '', sort = 'new', limit = 50, offset = 0 } = {}) {

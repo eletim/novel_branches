@@ -4,7 +4,7 @@
 
 ## できること
 
-- 管理者が作ったアカウントでログイン
+- 公開用はKeycloakでログイン、ローカル開発用はCLIで作ったアカウントでログイン
 - 新作と第一話を投稿、作者が自分の展開に続話を投稿
 - 誰でも任意の話から分岐し、分岐からさらに分岐
 - 共通の話を複製せず参照し、分岐ごとの読む順番と親子関係を表示
@@ -12,13 +12,22 @@
 - 下書きをブラウザ内に自動保存（ユーザー・投稿先ごと）
 - 同じSQLiteデータを読む閲覧専用MCP：Streamable HTTPとstdio
 
+既存Tailscale内で利用する場合は [VPN起動手順](docs/vpn.md) を参照してください。
+
+## Keycloak・Nginxを含むローカル起動
+
+継続利用するlocalhost専用環境は [docs/local-validation.md](docs/local-validation.md) を参照してください。`npm run local -- up` でHTTPS・Keycloak・DBを起動し、設定とデータを再利用します。
+
 ## ローカル起動
 
-Node.js 24以上。外部パッケージのインストールやビルドは不要です。
+Node.js 24以上。依存パッケージをインストールして起動します。ビルドは不要です。
+
+公開サーバー用のKeycloak × Nginx構成は [docs/public-server.md](docs/public-server.md) を参照してください。以下はローカル開発用です。
 
 ```bash
 git clone https://github.com/eletim/novel_branches.git
 cd novel_branches
+npm ci
 
 # アカウントごとに実施。パスワードは10文字以上。
 # Bashで履歴に残さず入力し、標準入力へ渡す。
@@ -45,6 +54,8 @@ unset novel_password
 docker compose exec app node scripts/demo.mjs
 ```
 
+このComposeはローカル開発専用です。公開用には単独の `deploy/compose.public.yaml` を使います。
+
 データは名前付きvolume `novel-data` に保存します。ホストの公開先は127.0.0.1:3000です。2〜3人で共有する場合は、この前段にHTTPSのリバースプロキシ等を置き、下記の `APP_ORIGIN` と `COOKIE_SECURE` を合わせてください。ホスティング先はまだ固定していません。
 
 ## 設定
@@ -60,11 +71,11 @@ Node起動時は環境変数で指定します。Docker Composeでは同名の�
 | `COOKIE_SECURE` | `false` | HTTPS運用時は`true` |
 | `MCP_TOKEN` | 未設定 | HTTP MCP用の共有閲覧トークン。未設定ならHTTP MCPは利用不可 |
 
-Webの作品本文と一覧はログイン必須です。セッションは7日で失効します。HTTP MCPは別のBearerトークンで全作品を閲覧できます。投稿用の権限はありません。
+Webの作品本文と一覧はログイン必須です。ローカル開発用のセッションは7日で失効し、HTTP MCPは共有Bearerトークンを使います。公開用ではKeycloakへ切り替え、共有トークンとローカルログインを無効にします。
 
 ## MCP接続
 
-詳しい設定は [docs/mcp.md](docs/mcp.md)。提供ツールは以下の4つです。
+詳しい設定は [docs/mcp.md](docs/mcp.md)。公開用の認証設定は [docs/public-server.md](docs/public-server.md) を参照してください。提供ツールは以下の4つです。
 
 | ツール | 内容 |
 |---|---|
@@ -80,14 +91,14 @@ npm test
 npm run dev
 ```
 
-テストは一時DBを使い、分岐と入れ子の読書順、所有権、投稿競合、1人1票、保存、セッション、2人でのHTTP操作、HTTP MCP、stdioのJSON-RPCを確認します。GitHub ActionsでもNode 24で実行します。
+テストは一時DBと署名付きのテスト用OIDCプロバイダーを使い、分岐と入れ子の読書順、所有権、投稿競合、1人1票、保存、セッション、2人でのHTTP操作、HTTP MCP、stdioのJSON-RPCを確認します。GitHub ActionsでもNode 24で実行します。
 
 ## この初期版の範囲
 
 - 投稿済みの話は編集・削除できません。分岐前の文章が後から変わる問題を避ける初期実装です。下書きは編集できます。
 - グッド順は作品内の各話の票を合計します。低評価の作品・話も保存され、閲覧できます。自動的な削除・非表示は行いません。
-- 公開登録、メール送信、コメント、AIによる執筆・変更、OAuth、パスワード再設定UIは未実装です。
-- HTTP MCPはBearer認証です。接続先クライアントがその認証方法を扱える必要があります。ChatGPTへの実接続と外部ホストへの配置は別途確認が必要です。
+- 公開登録、メール送信、コメント、AIによる執筆・変更、アプリ独自のパスワード再設定UIは未実装です。
+- HTTP MCPはBearer認証です（公開用はKeycloakのアクセストークン）。接続先クライアントがその認証方法を扱える必要があります。ChatGPTへの実接続と外部ホストへの配置は別途確認が必要です。
 - 単一プロセスとSQLiteの構成です。データを持つサーバーで起動してください。
 
 設計は [docs/architecture.md](docs/architecture.md)、作業状態は [docs/status.md](docs/status.md)。
