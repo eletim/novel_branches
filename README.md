@@ -12,6 +12,10 @@
 - 下書きをブラウザ内に自動保存（ユーザー・投稿先ごと）
 - 同じSQLiteデータを読む閲覧専用MCP：Streamable HTTPとstdio
 
+## Keycloak・Nginxを含むローカル起動
+
+継続利用するlocalhost専用環境は [docs/local-validation.md](docs/local-validation.md) を参照してください。`npm run local -- up` でHTTPS・Keycloak・DBを起動し、設定とデータを再利用します。
+
 ## ローカル起動
 
 Node.js 24以上。依存パッケージをインストールして起動します。ビルドは不要です。

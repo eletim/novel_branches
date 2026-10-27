@@ -94,6 +94,8 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
           return send(200,{user:login.user});
         }
         if (!user) throw new AppError('ログインしてください。',401);
+        // A different tab may have replaced this browser's session cookie.
+        if (!['GET','HEAD'].includes(req.method) && req.headers['x-novel-user'] !== undefined && req.headers['x-novel-user'] !== String(user.id)) throw new AppError('別のユーザーに切り替わりました。下書きを保存したまま、画面を再読み込みしてください。',409);
         if (req.method !== 'GET' && !req.headers['content-type']?.includes('application/json')) throw new AppError('application/jsonで送信してください。',415);
         if (url.pathname === '/api/logout' && req.method === 'POST') {
           // Revoke locally even if Keycloak is temporarily unavailable.

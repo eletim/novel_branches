@@ -86,6 +86,8 @@ OAuth認可サーバーの自動発見（protected-resource metadata）や動的
 
 ## 隔離された実スタックテスト
 
+継続利用する場合は [ローカル導入・検証記録](local-validation.md) の `novel-branches-local` を使ってください。以下の `down -v` はCI等の使い捨てデータ専用です。準備スクリプトは既存ファイルを再利用し、不完全な設定では停止します。
+
 DockerとCompose、Node.js 24、OpenSSLがある環境で実行します。本番ドメインも本番の秘密値も使いません。
 
 ```bash

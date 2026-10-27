@@ -14,10 +14,16 @@
     "user": "node scripts/user.mjs",
     "demo": "node scripts/demo.mjs",
     "mcp": "node src/stdio.mjs",
-    "test:stack": "node scripts/test-stack.mjs"
+    "test:stack": "node scripts/test-stack.mjs",
+    "local": "node scripts/local-stack.mjs",
+    "test:browser": "node scripts/test-browser.mjs",
+    "test:expiry": "node scripts/test-expiry.mjs"
   },
   "dependencies": {
     "jose": "6.2.13",
     "openid-client": "6.8.8"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
   }
 }

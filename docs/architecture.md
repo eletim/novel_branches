@@ -33,7 +33,7 @@ Node.js 24標準のHTTPサーバー、SQLite、ブラウザのHTML/CSS/JavaScrip
 
 ## 初期運用
 
-アカウントはCLIで追加します。ログインにはHttpOnly / SameSite=Lax cookieを使用し、パスワード照合失敗の試行を接続元IP単位で制限します。HTTPS運用時はSecure属性を設定します。本文はHTMLとして解釈せず表示します。外部Originの操作を拒否します。
+ローカルパスワード認証のアカウントはCLIで追加します。Keycloak構成ではKeycloakがアカウントと参加ロールを管理します。ログインにはHttpOnly / SameSite=Lax cookieを使用し、パスワード照合失敗の試行を接続元IP単位で制限します。HTTPS運用時はSecure属性を設定します。本文はHTMLとして解釈せず表示します。外部Originの操作を拒否します。
 
 MCPは閲覧専用で、ブラウザ用cookieと独立したBearerトークンで認証します。セッションを必要としないJSON応答型Streamable HTTPと、ローカルstdioを実装しています。
 
@@ -44,3 +44,5 @@ MCPは閲覧専用で、ブラウザ用cookieと独立したBearerトークン�
 ## 公開用の認証
 
 `src/auth.mjs` は `openid-client` / `jose` を使用します。`oidc_identities` が issuer + sub と既存の作者IDを対応付け、`oidc_logins` は一度だけ利用できるログイン確認情報を保存します。セッションには認証方式を持たせ、OIDCモードではローカルセッションを受け付けません。既存の本文・所有権は変更しない追加型のDBマイグレーションです。構成とテスト手順は [public-server.md](public-server.md) を参照してください。
+
+分岐の目次から読書すると、URLの `?branch=ID`（hash内）に選択した展開を保持し、その経路の次話・前話へ移動します。変更APIの `X-Novel-User` は画面が想定するユーザーと認証済みセッションの一致確認にのみ使います。認証や権限付与の代わりにはなりません。

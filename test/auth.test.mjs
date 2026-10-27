@@ -122,6 +122,11 @@ test('本番OIDCでは旧ログイン・旧セッション・偽の認証ヘッ�
     const response=await f.finish(await f.start()),cookie=session(response);
     assert.equal((await f.request('/api/logout',{method:'POST',data:{},cookie,headers:{Origin:'https://attacker.example','X-Forwarded-Host':'novels.example.test'}})).status,403);
     assert.equal((await f.request('/api/logout',{method:'POST',data:{},cookie,headers:{Origin:''}})).status,403);
+    const who=(await (await f.request('/api/me',{cookie})).json()).user;
+    const data={title:'identity-bound post',chapterTitle:'one',body:'body'};
+    assert.equal((await f.request('/api/stories',{method:'POST',data,cookie,headers:{'X-Novel-User':String(local.id)}})).status,409);
+    assert.equal(f.store.listStories({}).length,0);
+    assert.equal((await f.request('/api/stories',{method:'POST',data,cookie,headers:{'X-Novel-User':String(who.id)}})).status,201);
   }finally{await f.close();}
 });
 test('MCPはKeycloakの署名・audience・scope・ロールを検証し、共有トークンに戻らない',async()=>{

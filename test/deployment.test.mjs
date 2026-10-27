@@ -1,6 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, mkdirSync, copyFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,4 +28,21 @@ test('配布するrealmは登録・パスワードgrant・ワイルドカードr
   const basic=realm.clientScopes.find(s=>s.name==='basic');assert.ok(basic.protocolMappers.some(m=>m.protocolMapper==='oidc-sub-mapper' && m.config['access.token.claim']==='true'));
   assert.ok(realm.clients.every(c=>c.defaultClientScopes.includes('basic')));
   const mcp=realm.clients.find(c=>c.clientId==='novel-mcp');assert.equal(mcp.standardFlowEnabled,false);assert.deepEqual(mcp.redirectUris,[]);
+});
+
+test('localhost fixtures are reused without rotating passwords or certificates',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'novel-fixtures-'));
+  try {
+    mkdirSync(join(dir,'deploy/keycloak'),{recursive:true});
+    copyFileSync('deploy/keycloak/novel-branches-realm.json',join(dir,'deploy/keycloak/novel-branches-realm.json'));
+    const script=new URL('../scripts/prepare-stack-test.mjs',import.meta.url).pathname;
+    execFileSync(process.execPath,[script],{cwd:dir});
+    const files=['stack.env','test-realm.json','tls/fullchain.pem','tls/privkey.pem'];
+    const before=files.map(f=>readFileSync(join(dir,'deploy/.test',f),'utf8'));
+    execFileSync(process.execPath,[script],{cwd:dir});
+    assert.deepEqual(files.map(f=>readFileSync(join(dir,'deploy/.test',f),'utf8')),before);
+    rmSync(join(dir,'deploy/.test/tls/privkey.pem'));
+    assert.throws(()=>execFileSync(process.execPath,[script],{cwd:dir,stdio:'pipe'}));
+    assert.equal(readFileSync(join(dir,'deploy/.test/stack.env'),'utf8'),before[0]);
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });

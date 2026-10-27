@@ -42,6 +42,8 @@ assert.ok(ready,'Keycloak did not become ready');
 console.log('PASS: Keycloak discovery over verified HTTPS');
 const anonymous=new BrowserSession();
 assert.equal((await anonymous.api('/stories')).status,401);
+assert.equal((await anonymous.fetch('/api/stories',{headers:{'X-Auth-Request-User':'1','X-Forwarded-User':'test-member','X-Novel-User':'1',Cookie:'session=legacy-session'}})).status,401);
+assert.equal((await anonymous.api('/login','POST',{username:'test-member',password:'not-a-real-password'})).status,404);
 for(const path of ['/id/admin/','/id/realms/master/.well-known/openid-configuration','/id/health','/health'])assert.equal((await anonymous.fetch(path)).status,404);
 const redirect=await fetch('http://localhost:8088/',{redirect:'manual'});assert.equal(redirect.status,308);assert.equal(redirect.headers.get('location'),origin+'/');
 const home=await anonymous.fetch('/');assert.match(home.headers.get('strict-transport-security'),/max-age/);

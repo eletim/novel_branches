@@ -26,3 +26,7 @@ Dockerを利用できるGitHub Actionsでは、Keycloak・PostgreSQL・Nginx・�
 - 投稿済み本文の編集/削除UI、一般公開向けの登録機能。
 
 公開用設定は [public-server.md](public-server.md) を参照してください。
+
+## localhost実操作検証（2026-10-27）
+
+Keycloak・Nginx・PostgreSQL・アプリを専用の127.0.0.1環境に導入し、実ChromeとHTTP MCPクライアントで検証。分岐の読書経路保持、別タブのユーザー切り替えによる誤投稿防止、期限切れ時の再ログイン導線、秘密値を再生成しない起動手順を追加。自動テストは20件。起動、アカウント、実施範囲と未確認事項は [local-validation.md](local-validation.md) を参照。
