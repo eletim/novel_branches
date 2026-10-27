@@ -1,0 +1,75 @@
+# Deliberately omit query strings: authorization codes must not enter access logs.
+log_format novels '$remote_addr [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent';
+access_log /var/log/nginx/access.log novels;
+server_tokens off;
+limit_req_zone $binary_remote_addr zone=auth_requests:10m rate=10r/s;
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+server {
+    listen 80;
+    server_name ${PUBLIC_HOST};
+    return 308 ${APP_ORIGIN}$request_uri;
+}
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_certificate /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 444;
+}
+server {
+    listen 443 ssl;
+    server_name ${PUBLIC_HOST};
+    ssl_certificate /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+    client_max_body_size 512k;
+    client_body_timeout 15s;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    proxy_send_timeout 30s;
+    proxy_http_version 1.1;
+    proxy_set_header Host ${PUBLIC_HOST};
+    proxy_set_header Connection "";
+    # Overwrite proxy metadata rather than appending attacker-supplied values.
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host ${PUBLIC_HOST};
+    proxy_set_header X-Forwarded-Port ${HTTPS_PORT};
+    proxy_set_header X-Forwarded-Prefix "";
+    proxy_set_header X-Original-URL "";
+    proxy_set_header X-Original-Method "";
+    proxy_set_header X-Forwarded-Access-Token "";
+
+    # Only this application's realm and login assets are exposed.
+    # /id/admin, /id/realms/master and Keycloak management endpoints remain private.
+    location ^~ /id/realms/novel-branches/ {
+        limit_req zone=auth_requests burst=40 nodelay;
+        limit_req_status 429;
+        proxy_pass http://keycloak:8080;
+    }
+    location ^~ /id/resources/ { proxy_pass http://keycloak:8080; }
+    location /id { return 404; }
+    location = /health { return 404; }
+    location = /auth/login {
+        limit_req zone=auth_requests burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://app:3000;
+    }
+    location = /mcp {
+        proxy_buffering off;
+        proxy_pass http://app:3000;
+    }
+    location / { proxy_pass http://app:3000; }
+}

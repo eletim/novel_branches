@@ -10,4 +10,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - run: npm ci
       - run: npm test
+
+  keycloak-nginx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: node scripts/prepare-stack-test.mjs
+      - name: Validate and build isolated stack
+        run: |
+          docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml config --quiet
+          docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml up -d --build
+      - name: Real Keycloak and Nginx integration
+        run: NODE_EXTRA_CA_CERTS="$PWD/deploy/.test/tls/fullchain.pem" npm run test:stack
+      - name: Stop and remove disposable test data
+        if: always()
+        run: docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml down -v --remove-orphans

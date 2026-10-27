@@ -6,7 +6,7 @@
 
 ## 構成
 
-Node.js 24標準のHTTPサーバー、SQLite、ブラウザのHTML/CSS/JavaScript。外部サービスの契約やパッケージのインストールなしで起動できます。Docker用の構成も用意しています。
+Node.js 24標準のHTTPサーバー、SQLite、ブラウザのHTML/CSS/JavaScript。ローカル開発では外部サービスの契約なしで起動できます。公開用はKeycloakのOIDC認証とNginxのHTTPS入口を使用します。Docker用の構成も用意しています。
 
 - `src/store.mjs`: データとトランザクション、ユーザー認証
 - `src/server.mjs`: Web、HTTP API、Bearer認証付きHTTP MCP
@@ -40,3 +40,7 @@ MCPは閲覧専用で、ブラウザ用cookieと独立したBearerトークン�
 ## バックアップ
 
 停止できる運用ではサーバーを停止してからDBをコピーしてください。起動中のバックアップはSQLiteのバックアップ機能を使用します。WAL動作中に `.db` だけを単純コピーすると、直近の変更を取りこぼす可能性があります。Dockerのvolume削除はデータ削除になるため、通常の停止には `docker compose down`（`-v` なし）を使用します。
+
+## 公開用の認証
+
+`src/auth.mjs` は `openid-client` / `jose` を使用します。`oidc_identities` が issuer + sub と既存の作者IDを対応付け、`oidc_logins` は一度だけ利用できるログイン確認情報を保存します。セッションには認証方式を持たせ、OIDCモードではローカルセッションを受け付けません。既存の本文・所有権は変更しない追加型のDBマイグレーションです。構成とテスト手順は [public-server.md](public-server.md) を参照してください。

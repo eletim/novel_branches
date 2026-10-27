@@ -5,17 +5,27 @@ import { parseArgs } from 'node:util';
 import { timingSafeEqual } from 'node:crypto';
 import { Store, AppError } from './store.mjs';
 import { rpc } from './mcp.mjs';
+import { authSettings, OidcAuth, cookie, sessionCookie } from './auth.mjs';
 
 const staticFiles = {'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 function equal(a,b) { return typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b)); }
-async function body(req) {
+async function rawBody(req, limit = 512000) {
   let size = 0, chunks = [];
-  for await (const chunk of req) { size += chunk.length; if (size > 512000) throw new AppError('入力が大きすぎます。',413); chunks.push(chunk); }
-  try { const value = JSON.parse(Buffer.concat(chunks).toString('utf8')); if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(); return value; }
+  for await (const chunk of req) { size += chunk.length; if (size > limit) throw new AppError('入力が大きすぎます。',413); chunks.push(chunk); }
+  return Buffer.concat(chunks).toString('utf8');
+}
+async function body(req) {
+  const raw = await rawBody(req);
+  try { const value = JSON.parse(raw); if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(); return value; }
   catch { throw new AppError('JSONの形式が不正です。'); }
 }
-export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN, origin = process.env.APP_ORIGIN, secureCookies = process.env.COOKIE_SECURE === 'true'} = {}) {
+export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN, origin = process.env.APP_ORIGIN, secureCookies = process.env.COOKIE_SECURE === 'true', auth = authSettings()} = {}) {
   const attempts = new Map();
+  const identity = auth.mode === 'oidc' ? new OidcAuth(store,auth) : null;
+  if (identity && origin !== auth.origin) throw Error('APP_ORIGIN must match OIDC origin');
+  if (identity && !auth.allowHttp && !secureCookies) throw Error('OIDC requires secure cookies');
+  const authInfo = {mode:auth.mode,loginUrl:identity ? '/auth/login' : null};
+  const loginCookie = (value,maxAge=600) => `${secureCookies ? '__Host-oidc-login' : 'oidc_login'}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secureCookies ? '; Secure' : ''}`;
   const server = http.createServer(async (req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Referrer-Policy','same-origin');
@@ -24,10 +34,36 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
     try {
       const url = new URL(req.url,'http://localhost');
       const expectedOrigin = origin || `http://${req.headers.host}`;
+      if (url.pathname.startsWith('/api/') && !['GET','HEAD'].includes(req.method) && identity && req.headers.origin !== expectedOrigin) throw new AppError('操作元を確認できません。',403);
       if (req.headers.origin && req.headers.origin !== expectedOrigin) throw new AppError('この接続元からの操作は許可されていません。',403);
       if (url.pathname === '/health') return send(200,{status:'ok'});
+      if (identity && url.pathname.startsWith('/auth/')) {
+        const redirect = location => {res.writeHead(302,{Location:location,'Cache-Control':'no-store'});res.end();};
+        if (url.pathname === '/auth/login' && req.method === 'GET') {
+          try {
+            const login = await identity.start();
+            res.setHeader('Set-Cookie',loginCookie(login.browser));
+            return redirect(login.location);
+          } catch(e) {if (e instanceof AppError) throw e;throw new AppError('認証サービスに接続できません。少し待って再試行してください。',503);}
+        }
+        if (url.pathname === '/auth/callback' && req.method === 'GET') {
+          const login = await identity.callback(new URL(req.url,auth.origin),cookie(req,secureCookies ? '__Host-oidc-login' : 'oidc_login'));
+          store.logout(cookie(req,secureCookies ? '__Host-session' : 'session'));
+          res.setHeader('Set-Cookie',[loginCookie('',0),sessionCookie(login.token,{secure:secureCookies,maxAge:login.maxAge})]);
+          return redirect(auth.origin+'/');
+        }
+        if (url.pathname === '/auth/backchannel-logout' && req.method === 'POST') {
+          if (!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')) throw new AppError('Invalid logout content type',415);
+          const form = new URLSearchParams(await rawBody(req,64000));
+          await identity.backchannelLogout(form.get('logout_token'));
+          return send(200,{ok:true});
+        }
+        throw new AppError('見つかりません。',404);
+      }
       if (url.pathname === '/mcp') {
-        if (!mcpToken || !equal(req.headers.authorization,`Bearer ${mcpToken}`)) { res.setHeader('WWW-Authenticate','Bearer'); return send(401,{error:'MCP token required'}); }
+        if (identity) {
+          try {await identity.verifyMcp(req.headers.authorization);} catch(e) {res.setHeader('WWW-Authenticate','Bearer');throw e;}
+        } else if (!mcpToken || !equal(req.headers.authorization,`Bearer ${mcpToken}`)) { res.setHeader('WWW-Authenticate','Bearer'); return send(401,{error:'MCP token required'}); }
         if (req.method !== 'POST') { res.setHeader('Allow','POST'); return send(405,{error:'Use POST; server-initiated SSE is not supported.'}); }
         if (!req.headers['content-type']?.includes('application/json')) return send(415,{error:'application/json required'});
         const accept = req.headers.accept || '';
@@ -40,10 +76,11 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
         return send(result ? 200 : 202,result || undefined);
       }
       if (url.pathname.startsWith('/api/')) {
-        let token = req.headers.cookie?.split(';').map(c=>c.trim()).find(c=>c.startsWith('session='))?.slice(8);
-        const user = store.session(token);
-        if (url.pathname === '/api/me' && req.method === 'GET') return send(200,{user});
+        const token = cookie(req,secureCookies ? '__Host-session' : 'session');
+        const user = store.session(token,auth.mode);
+        if (url.pathname === '/api/me' && req.method === 'GET') return send(200,{user,auth:authInfo});
         if (url.pathname === '/api/login' && req.method === 'POST') {
+          if (identity) throw new AppError('Keycloakからログインしてください。',404);
           const key = req.socket.remoteAddress;
           const now = Date.now(), attempt = attempts.get(key);
           if (attempt && attempt.until > now && attempt.count >= 15) throw new AppError('しばらく待ってからログインしてください。',429);
@@ -52,12 +89,20 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
           a.count++; attempts.set(key,a);
           const input = await body(req), login = store.login(input.username,input.password);
           attempts.delete(key);
-          res.setHeader('Set-Cookie',`session=${login.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secureCookies ? '; Secure' : ''}`);
+          store.logout(token);
+          res.setHeader('Set-Cookie',sessionCookie(login.token,{secure:secureCookies,maxAge:604800}));
           return send(200,{user:login.user});
         }
         if (!user) throw new AppError('ログインしてください。',401);
         if (req.method !== 'GET' && !req.headers['content-type']?.includes('application/json')) throw new AppError('application/jsonで送信してください。',415);
-        if (url.pathname === '/api/logout' && req.method === 'POST') {store.logout(token);res.setHeader('Set-Cookie','session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');return send(200,{ok:true});}
+        if (url.pathname === '/api/logout' && req.method === 'POST') {
+          // Revoke locally even if Keycloak is temporarily unavailable.
+          let logoutUrl;
+          try {if(identity) logoutUrl = await identity.logoutUrl(token);} catch {}
+          store.logout(token);
+          res.setHeader('Set-Cookie',sessionCookie('',{secure:secureCookies}));
+          return send(200,{ok:true,...(logoutUrl ? {logoutUrl} : {})});
+        }
         if (url.pathname === '/api/stories' && req.method === 'GET') return send(200,{stories:store.listStories({query:url.searchParams.get('q') || '',sort:url.searchParams.get('sort') || 'new',limit:Number(url.searchParams.get('limit') || 50),offset:Number(url.searchParams.get('offset') || 0)})});
         if (url.pathname === '/api/stories' && req.method === 'POST') return send(201,store.createStory(user.id,await body(req)));
         const match = url.pathname.match(/^\/api\/(stories|chapters|branches)\/([1-9]\d*)(?:\/(fork|like|chapters|path))?$/);

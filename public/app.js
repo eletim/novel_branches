@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 const app = $('#app'), dialog = $('#editor');
-let user, viewGeneration = 0, toastTimer;
+let user, auth = {mode:'local'}, viewGeneration = 0, toastTimer;
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path,method='GET',data) {
   const res = await fetch('/api'+path,{method,headers:data ? {'Content-Type':'application/json'} : {},body:data ? JSON.stringify(data) : undefined});
@@ -11,11 +11,11 @@ async function api(path,method='GET',data) {
 function toast(message) {clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').style.display='block';toastTimer=setTimeout(()=>$('#toast').style.display='none',3500);}
 function nav() {
   $('#nav').innerHTML = user ? `<span class="username">${esc(user.display_name)}</span><button class="small" id="write">＋ 作品を書く</button><button class="secondary small" id="logout">ログアウト</button>` : '<span class="meta">小さな創作の部屋</span>';
-  if(user) {$('#write').onclick=()=>editor('new');$('#logout').onclick=async()=>{try{await api('/logout','POST',{});user=null;nav();await render();}catch(e){toast(e.message);}};}
+  if(user) {$('#write').onclick=()=>editor('new');$('#logout').onclick=async()=>{try{const result=await api('/logout','POST',{});if(result.logoutUrl){location.assign(result.logoutUrl);return;}user=null;nav();await render();}catch(e){toast(e.message);}};}
 }
 function login() {
-  app.innerHTML=`<section class="hero"><div><span class="eyebrow">A STORY CAN HAVE MORE THAN ONE FUTURE</span><h1>その物語には、<br>まだ別の続きがある。</h1><p>読む。書く。分かれて、広がる。<br>ひとつの物語から生まれる、みんなの平行世界。</p></div>${art()}</section><section class="login"><span class="eyebrow">WELCOME TO YOUR WRITING ROOM</span><h2>創作の部屋に入る</h2><form id="login"><label for="username">ユーザー名</label><input id="username" name="username" autocomplete="username" required maxlength="40"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><p class="error" role="alert"></p><button type="submit">ログイン →</button></form><p class="hint">参加用のアカウントは管理者から受け取ってください。</p></section>`;
-  $('#login').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{user=(await api('/login','POST',Object.fromEntries(new FormData(form)))).user;nav();await render();}catch(err){form.querySelector('.error').textContent=err.message;}finally{button.disabled=false;}};
+  app.innerHTML=`<section class="hero"><div><span class="eyebrow">A STORY CAN HAVE MORE THAN ONE FUTURE</span><h1>その物語には、<br>まだ別の続きがある。</h1><p>読む。書く。分かれて、広がる。<br>ひとつの物語から生まれる、みんなの平行世界。</p></div>${art()}</section><section class="login"><span class="eyebrow">WELCOME TO YOUR WRITING ROOM</span><h2>創作の部屋に入る</h2>${auth.mode==='oidc'?'<p class="hint">参加用アカウントでログインしてください。</p><a class="button" href="/auth/login">ログイン →</a>':'<form id="login"><label for="username">ユーザー名</label><input id="username" name="username" autocomplete="username" required maxlength="40"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><p class="error" role="alert"></p><button type="submit">ログイン →</button></form>'}<p class="hint">参加用のアカウントは管理者から受け取ってください。</p></section>`;
+  if($('#login'))$('#login').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{user=(await api('/login','POST',Object.fromEntries(new FormData(form)))).user;nav();await render();}catch(err){form.querySelector('.error').textContent=err.message;}finally{button.disabled=false;}};
 }
 function art(){return '<div class="hero-art" aria-label="共通の話から、2つの世界へ分岐"><div class="worlds"><span class="origin"><small>THE BEGINNING</small>ひとつの物語</span><span class="connector">⑂</span><span><small>WORLD A</small>あなたの続き</span><span><small>WORLD B</small>誰かの続き</span></div></div>';}
 async function library(params,generation) {
@@ -65,4 +65,4 @@ async function render() {
   try{if(route.startsWith('story/'))await storyView(Number(route.split('/')[1]),generation);else if(route.startsWith('chapter/'))await chapterView(Number(route.split('/')[1]),generation);else await library(params,generation);}catch(e){if(generation===viewGeneration){if(!user)login();else app.innerHTML=`<div class="empty"><h3>読み込めませんでした</h3><p>${esc(e.message)}</p><a class="button secondary" href="#">一覧へ戻る</a></div>`;}}window.scrollTo(0,0);
 }
 window.addEventListener('hashchange',render);
-try{user=(await api('/me')).user;nav();await render();}catch(e){app.innerHTML=`<p role="alert">${esc(e.message)} 再読み込みしてください。</p>`;}
+try{const me=await api('/me');user=me.user;auth=me.auth||auth;nav();await render();}catch(e){app.innerHTML=`<p role="alert">${esc(e.message)} 再読み込みしてください。</p>`;}
