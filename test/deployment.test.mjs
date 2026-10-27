@@ -24,5 +24,7 @@ test('配布するrealmは登録・パスワードgrant・ワイルドカードr
   assert.equal(realm.registrationAllowed,false);assert.equal(realm.bruteForceProtected,true);assert.equal(realm.users,undefined);
   for(const client of realm.clients){assert.equal(client.directAccessGrantsEnabled,false);assert.equal(client.implicitFlowEnabled,false);assert.equal(client.serviceAccountsEnabled,false);assert.ok(client.redirectUris.every(uri=>!uri.includes('*')));}
   const web=realm.clients.find(c=>c.clientId==='novel-web');assert.equal(web.publicClient,false);assert.equal(web.attributes['pkce.code.challenge.method'],'S256');assert.equal(web.attributes['backchannel.logout.session.required'],'true');
+  const basic=realm.clientScopes.find(s=>s.name==='basic');assert.ok(basic.protocolMappers.some(m=>m.protocolMapper==='oidc-sub-mapper' && m.config['access.token.claim']==='true'));
+  assert.ok(realm.clients.every(c=>c.defaultClientScopes.includes('basic')));
   const mcp=realm.clients.find(c=>c.clientId==='novel-mcp');assert.equal(mcp.standardFlowEnabled,false);assert.deepEqual(mcp.redirectUris,[]);
 });

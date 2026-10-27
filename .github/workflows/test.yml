@@ -29,6 +29,9 @@ jobs:
           docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml up -d --build
       - name: Real Keycloak and Nginx integration
         run: NODE_EXTRA_CA_CERTS="$PWD/deploy/.test/tls/fullchain.pem" npm run test:stack
+      - name: Verify access logs omit authentication queries
+        run: |
+          docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml logs nginx | python3 -c "import sys; logs=sys.stdin.read(); assert '/auth/callback?' not in logs; assert 'id_token_hint=' not in logs; print('Access log query check passed')"
       - name: Stack diagnostics on failure
         if: failure()
         run: docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml logs --tail=100 app keycloak nginx

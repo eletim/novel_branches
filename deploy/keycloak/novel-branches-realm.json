@@ -65,6 +65,7 @@
         }
       ],
       "defaultClientScopes": [
+        "basic",
         "profile"
       ]
     },
@@ -110,6 +111,7 @@
         }
       ],
       "defaultClientScopes": [
+        "basic",
         "profile"
       ]
     }
@@ -152,6 +154,24 @@
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "basic",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "subject",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
           }
         }
       ]

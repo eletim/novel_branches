@@ -1,20 +1,22 @@
 # Deliberately omit query strings: authorization codes must not enter access logs.
 log_format novels '$remote_addr [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent';
-access_log /var/log/nginx/access.log novels;
 server_tokens off;
 limit_req_zone $binary_remote_addr zone=auth_requests:10m rate=10r/s;
 
 server {
+    access_log /var/log/nginx/access.log novels;
     listen 80 default_server;
     server_name _;
     return 444;
 }
 server {
+    access_log /var/log/nginx/access.log novels;
     listen 80;
     server_name ${PUBLIC_HOST};
     return 308 ${APP_ORIGIN}$request_uri;
 }
 server {
+    access_log /var/log/nginx/access.log novels;
     listen 443 ssl default_server;
     server_name _;
     ssl_certificate /etc/nginx/tls/fullchain.pem;
@@ -23,6 +25,7 @@ server {
     return 444;
 }
 server {
+    access_log /var/log/nginx/access.log novels;
     listen 443 ssl;
     server_name ${PUBLIC_HOST};
     ssl_certificate /etc/nginx/tls/fullchain.pem;
