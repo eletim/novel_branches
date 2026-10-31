@@ -84,6 +84,8 @@ openssl s_client -connect eletim.jp:443 -servername eletim.jp </dev/null 2>/dev/
 - 実Chromium: 2人のログイン、ログアウト、参加ロールなし拒否、新作、続話、分岐、入れ子の分岐、各経路の読む順番、グッド追加/取消/重複抑止、検索・並べ替え、下書き、競合、別ユーザーへの誤投稿防止、PC/スマホ幅を確認。
 - 管理パス・master realm・healthは404、未ログインの作品APIは401。ログに秘密値・認可コードqueryの混入なし。
 - 全4サービスの再起動前後でユーザー・作品・分岐・本文・票のSHA256が一致。VPS自体は再起動していない。
-- バックアップから別プロジェクト `novel-restore-check-20261101-b` へ復元し、SQLite integrity OK、Keycloakユーザー4件を確認。検証用復元コンテナは停止済み、volumeは保持。
+- バックアップから別プロジェクト `novel-restore-check-20261101-b` へ復元し、SQLite integrity OK、Keycloakユーザー4件を確認。最新バックアップでも `novel-restore-final-20261101` へ復元し、作品2件・分岐6件・話12件・グッド2件と作者情報のSHA256が本番DBと完全一致した。検証用復元コンテナは停止済み、volumeは保持。
 - 検証用アカウントはランダムな `verify-` 接頭辞の3名。本番の初期realmにローカル検証ユーザーをインポートしていない。新規に作った「ブラウザ検証」作品は検証記録として保持する。終了時に専用3名を無効化し、Keycloakのセッションもログアウトする。
 - 外部からの本番URLの最終確認は、既存ntfyのURL置き換えの承認後に実施する。
+
+最新の検証済みバックアップ: `/home/ubuntu/novel-backups/20261031T232939Z`（日本時間2026-11-01 08:29:39、コード0a1e9eb）。検証アカウント3名は無効化・セッションログアウト済み。検証作品2件は削除していない。公開切り替え用の設定は `deploy/caddy/Caddyfile.eletim` に準備済みで、承認後に既存Caddyfileのバックアップを取ってから差し替え、validate/reloadし、外部HTTPSとログインを最終確認する。
