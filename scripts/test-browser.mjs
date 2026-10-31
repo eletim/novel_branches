@@ -3,18 +3,18 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const config=process.env.TEST_STACK_ENV||'deploy/.test/stack.env';
-assert.ok(['deploy/.test/stack.env','deploy/.test/vpn.env'].includes(config));
+assert.ok(['deploy/.test/stack.env','deploy/.test/vpn.env','deploy/.test/public.env'].includes(config));
 process.loadEnvFile(config);
 const origin=process.env.APP_ORIGIN;
-assert.ok(origin==='https://localhost:8443'||(config==='deploy/.test/vpn.env' && /^https:\/\/[a-z0-9.-]+\.ts\.net:8443$/.test(origin)));
-const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/usr/bin/google-chrome',headless:true});
+assert.ok((config==='deploy/.test/public.env' && origin==='https://eletim.jp')||origin==='https://localhost:8443'||(config==='deploy/.test/vpn.env' && /^https:\/\/[a-z0-9.-]+\.ts\.net:8443$/.test(origin)));
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||(config==='deploy/.test/public.env'?chromium.executablePath():'/usr/bin/google-chrome'),headless:true,...(process.env.TEST_PROXY?{proxy:{server:process.env.TEST_PROXY}}:{})});
 const out='deploy/.test/evidence';mkdirSync(out,{recursive:true});
 const errors=[];
 const context=await browser.newContext({viewport:{width:1280,height:900}});
 context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));
 const a=await context.newPage();
 const bctx=await browser.newContext({viewport:{width:1280,height:900}}),b=await bctx.newPage();
-async function login(p,name){await p.goto(origin);await p.locator('.login a').click();await p.locator('#username').fill('test-'+name);await p.locator('#password').fill(process.env['TEST_'+name.toUpperCase()+'_PASSWORD']);await p.locator('#kc-login').click();await p.locator('#write').waitFor();}
+async function login(p,name){await p.goto(origin);await p.locator('.login a').click();await p.locator('#username').fill((process.env.TEST_USER_PREFIX||'test-')+name);await p.locator('#password').fill(process.env['TEST_'+name.toUpperCase()+'_PASSWORD']);await p.locator('#kc-login').click();await p.locator('#write').waitFor();}
 async function go(p,hash){await p.goto(origin+'/'+hash);await p.locator(hash.startsWith('#chapter')?'.reader-body':hash.startsWith('#story')?'.branch-list':'.cards').waitFor();}
 async function post(p,values){for(const [key,value] of Object.entries(values))await p.locator('#edit-'+key).fill(value);await p.locator('#edit-form button[type=submit]').click();await p.locator('#editor').waitFor({state:'hidden'});await p.locator('.reader-heading h1').filter({hasText:values.chapterTitle||values.title}).waitFor();return Number(new URL(p.url()).hash.match(/chapter\/(\d+)/)[1]);}
 async function api(p,path,method='GET',data){return p.evaluate(async({path,method,data})=>{const r=await fetch('/api'+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});return {status:r.status,data:await r.json()};},{path,method,data});}
@@ -68,7 +68,7 @@ try{
  console.log('PASS browser: stale tab cannot post A draft as B');
  await a.locator('#logout').click();await a.locator('.login').waitFor();assert.notEqual(await a.evaluate(()=>getComputedStyle(document.body).backgroundColor),'rgb(237, 247, 255)');
  await login(a,'other');assert.equal(await a.locator('.username').textContent(),'Test other');await a.locator('#write').click();assert.equal(await a.locator('#edit-body').inputValue(),'');await a.locator('#close-editor').click();
- const denied=await browser.newContext(),d=await denied.newPage();await d.goto(origin+'/auth/login');await d.locator('#username').fill('test-outsider');await d.locator('#password').fill(process.env.TEST_OUTSIDER_PASSWORD);await d.locator('#kc-login').click();await d.getByText(/参加権限がありません/).waitFor();await denied.close();
+ const denied=await browser.newContext(),d=await denied.newPage();await d.goto(origin+'/auth/login');await d.locator('#username').fill((process.env.TEST_USER_PREFIX||'test-')+'outsider');await d.locator('#password').fill(process.env.TEST_OUTSIDER_PASSWORD);await d.locator('#kc-login').click();await d.getByText(/参加権限がありません/).waitFor();await denied.close();
  assert.deepEqual(errors,[]);
  writeFileSync(out+'/browser.json',JSON.stringify({story,first,second,fork,third,nested,concurrent,forkBranch:forkBranch.id,nestedBranch:nestedBranch.id,css,fonts:fonts.fonts,firstReadUrl,errors},null,2));
  console.log('PASS browser: CSS/mobile, search/sort, drafts/reload, concurrent conflict retains text, navigation/error recovery, logout/user switch, denied role');

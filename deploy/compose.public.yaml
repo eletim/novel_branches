@@ -5,14 +5,14 @@ services:
     restart: unless-stopped
     ports:
       - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:80"
-      - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+      - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PUBLISH_PORT:-${HTTPS_PORT:-443}}:443"
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST}
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
       HTTPS_PORT: ${HTTPS_PORT:-443}
       NGINX_ENVSUBST_FILTER: ^(PUBLIC_HOST|APP_ORIGIN|HTTPS_PORT)$
     volumes:
-      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${NGINX_TEMPLATE:-./nginx/default.conf.template}:/etc/nginx/templates/default.conf.template:ro
       - ${TLS_DIR:?Set TLS_DIR}:/etc/nginx/tls:ro
     depends_on:
       app:
@@ -60,6 +60,7 @@ services:
       options: {max-size: 10m, max-file: '3'}
 
   keycloak:
+    mem_limit: ${KC_MEMORY_LIMIT:-512m}
     image: quay.io/keycloak/keycloak:26.8.1
     command: [start, --import-realm]
     restart: unless-stopped
@@ -76,6 +77,7 @@ services:
       KC_HTTP_RELATIVE_PATH: /id
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: 'true'
+      JAVA_OPTS_KC_HEAP: ${KC_HEAP:--XX:InitialRAMPercentage=50 -XX:MaxRAMPercentage=70}
       # Realm-import placeholders; not rendered into tracked files.
       APP_ORIGIN: ${APP_ORIGIN}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
@@ -111,7 +113,9 @@ services:
       options: {max-size: 10m, max-file: '3'}
 
 networks:
-  edge: {}
+  edge:
+    name: ${EDGE_NETWORK_NAME:-${COMPOSE_PROJECT_NAME}_edge}
+    external: ${EDGE_NETWORK_EXTERNAL:-false}
   app-net: {internal: true}
   auth-net: {internal: true}
   db-net: {internal: true}
