@@ -1,10 +1,11 @@
+const basePath = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
 const $ = s => document.querySelector(s);
 const app = $('#app'), dialog = $('#editor');
 let user, auth = {mode:'local'}, viewGeneration = 0, toastTimer;
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path,method='GET',data) {
   if(data && path!=='/login' && !user)throw Error('ログインしてください。下書きはこの画面に残っています。');
-  const res = await fetch('/api'+path,{method,headers:data ? {'Content-Type':'application/json',...(user ? {'X-Novel-User':String(user.id)} : {})} : {},body:data ? JSON.stringify(data) : undefined});
+  const res = await fetch(basePath+'/api'+path,{method,headers:data ? {'Content-Type':'application/json',...(user ? {'X-Novel-User':String(user.id)} : {})} : {},body:data ? JSON.stringify(data) : undefined});
   const result = await res.json();
   if(!res.ok) {if(res.status===401 && path!='/login') {user=null;nav();} throw Error(result.error || '通信できませんでした。');}
   return result;
@@ -15,7 +16,7 @@ function nav() {
   if(user) {$('#write').onclick=()=>editor('new');$('#logout').onclick=async()=>{try{const result=await api('/logout','POST',{});if(result.logoutUrl){location.assign(result.logoutUrl);return;}user=null;nav();await render();}catch(e){toast(e.message);}};}
 }
 function login() {
-  app.innerHTML=`<section class="hero"><div><span class="eyebrow">A STORY CAN HAVE MORE THAN ONE FUTURE</span><h1>その物語には、<br>まだ別の続きがある。</h1><p>読む。書く。分かれて、広がる。<br>ひとつの物語から生まれる、みんなの平行世界。</p></div>${art()}</section><section class="login"><span class="eyebrow">WELCOME TO YOUR WRITING ROOM</span><h2>創作の部屋に入る</h2>${auth.mode==='oidc'?'<p class="hint">参加用アカウントでログインしてください。</p><a class="button" href="/auth/login">ログイン →</a>':'<form id="login"><label for="username">ユーザー名</label><input id="username" name="username" autocomplete="username" required maxlength="40"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><p class="error" role="alert"></p><button type="submit">ログイン →</button></form>'}<p class="hint">参加用のアカウントは管理者から受け取ってください。</p></section>`;
+  app.innerHTML=`<section class="hero"><div><span class="eyebrow">A STORY CAN HAVE MORE THAN ONE FUTURE</span><h1>その物語には、<br>まだ別の続きがある。</h1><p>読む。書く。分かれて、広がる。<br>ひとつの物語から生まれる、みんなの平行世界。</p></div>${art()}</section><section class="login"><span class="eyebrow">WELCOME TO YOUR WRITING ROOM</span><h2>創作の部屋に入る</h2>${auth.mode==='oidc'?'<p class="hint">参加用アカウントでログインしてください。</p><a class="button" href="'+basePath+'/auth/login">ログイン →</a>':'<form id="login"><label for="username">ユーザー名</label><input id="username" name="username" autocomplete="username" required maxlength="40"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256"><p class="error" role="alert"></p><button type="submit">ログイン →</button></form>'}<p class="hint">参加用のアカウントは管理者から受け取ってください。</p></section>`;
   if($('#login'))$('#login').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{user=(await api('/login','POST',Object.fromEntries(new FormData(form)))).user;nav();await render();}catch(err){form.querySelector('.error').textContent=err.message;}finally{button.disabled=false;}};
 }
 function art(){return '<div class="hero-art" aria-label="共通の話から、2つの世界へ分岐"><div class="worlds"><span class="origin"><small>THE BEGINNING</small>ひとつの物語</span><span class="connector">⑂</span><span><small>WORLD A</small>あなたの続き</span><span><small>WORLD B</small>誰かの続き</span></div></div>';}
@@ -62,7 +63,7 @@ function editor(mode,context={}) {
   form.oninput=saveDraft;
   form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;form.querySelector('.error').textContent='';try{const input=Object.fromEntries(new FormData(form));const path=mode==='new'?'/stories':mode==='fork'?`/chapters/${context.id}/fork`:`/branches/${context.id}/chapters`;if(mode==='append')input.expectedHeadId=context.head_id;const created=await api(path,'POST',input);try{localStorage.removeItem(draftKey);}catch{}dialog.close();toast('投稿しました。物語の世界が広がりました。');location.hash='chapter/'+created.chapterId;}catch(err){form.querySelector('.error').textContent=err.message;
     if(!user && auth.mode==='oidc'){
-      const link=document.createElement('a');link.href='/auth/login';link.className='button';link.textContent='再ログイン（本文を控えてから進んでください）';form.querySelector('.error').append(document.createElement('br'),link);
+      const link=document.createElement('a');link.href=basePath+'/auth/login';link.className='button';link.textContent='再ログイン（本文を控えてから進んでください）';form.querySelector('.error').append(document.createElement('br'),link);
     }
   }finally{button.disabled=false;}};
   dialog.showModal();

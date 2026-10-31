@@ -10,7 +10,7 @@ import { createApp } from '../src/server.mjs';
 
 const secret = 'test-client-secret-with-32-characters-minimum';
 const json = (res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
-async function fixture({internalRouting=false} = {}) {
+async function fixture({internalRouting=false,basePath=''} = {}) {
   const {publicKey,privateKey} = await generateKeyPair('RS256');
   const jwk = {...await exportJWK(publicKey),kid:'test-key',alg:'RS256',use:'sig'};
   const grants = new Map();
@@ -23,7 +23,7 @@ async function fixture({internalRouting=false} = {}) {
       tokenRequests++;
       let raw='';for await(const c of req)raw+=c;
       const body = new URLSearchParams(raw),grant=grants.get(body.get('code'));
-      if(!grant || body.get('client_secret')!==secret || body.get('client_id')!=='novel-web' || body.get('redirect_uri')!=='https://novels.example.test/auth/callback' || createHash('sha256').update(body.get('code_verifier')||'').digest('base64url')!==grant.challenge) return json(res,400,{error:'invalid_grant'});
+      if(!grant || body.get('client_secret')!==secret || body.get('client_id')!=='novel-web' || body.get('redirect_uri')!=='https://novels.example.test'+basePath+'/auth/callback' || createHash('sha256').update(body.get('code_verifier')||'').digest('base64url')!==grant.challenge) return json(res,400,{error:'invalid_grant'});
       grants.delete(body.get('code'));
       let jwt = await new SignJWT({nonce:grant.nonce,roles:['novel-member'],name:grant.name || '参加者',sid:grant.sid || 'keycloak-session',...grant.claims})
         .setProtectedHeader({alg:'RS256',kid:'test-key'}).setIssuer(grant.issuer || issuer).setAudience(grant.audience || 'novel-web').setSubject(grant.subject || 'member-1').setIssuedAt().setExpirationTime(grant.expiry || '5m').sign(grant.signingKey || privateKey);
@@ -36,11 +36,11 @@ async function fixture({internalRouting=false} = {}) {
   const internalIssuer=`http://127.0.0.1:${provider.address().port}/realms/novel-branches`;
   issuer=internalRouting ? 'https://novels.example.test/id/realms/novel-branches' : internalIssuer;
   const store = new Store(':memory:');
-  const auth = {mode:'oidc',origin:'https://novels.example.test',issuer,clientId:'novel-web',clientSecret:secret,memberRole:'novel-member',mcpAudience:'novel-mcp',allowHttp:!internalRouting,...(internalRouting?{internalIssuer}:{})};
+  const auth = {mode:'oidc',basePath,origin:'https://novels.example.test',issuer,clientId:'novel-web',clientSecret:secret,memberRole:'novel-member',mcpAudience:'novel-mcp',allowHttp:!internalRouting,...(internalRouting?{internalIssuer}:{})};
   const server = createApp({store,auth,origin:auth.origin,secureCookies:true,mcpToken:'legacy-token'});
   server.listen(0,'127.0.0.1');await once(server,'listening');
   const base=`http://127.0.0.1:${server.address().port}`;
-  const request=(path,{method='GET',data,raw,cookie,headers={}}={})=>fetch(base+path,{method,redirect:'manual',headers:{...(cookie?{Cookie:cookie}:{}),...(data?{'Content-Type':'application/json',Origin:auth.origin}:{}),...headers},body:raw??(data?JSON.stringify(data):undefined)});
+  const request=(path,{method='GET',data,raw,cookie,headers={}}={})=>fetch(base+basePath+path,{method,redirect:'manual',headers:{...(cookie?{Cookie:cookie}:{}),...(data?{'Content-Type':'application/json',Origin:auth.origin}:{}),...headers},body:raw??(data?JSON.stringify(data):undefined)});
   let codeCounter=0;
   const start=async(overrides={})=>{
     const response=await request('/auth/login');assert.equal(response.status,302);
@@ -157,4 +157,24 @@ test('公開issuerを検証したまま、discovery・コード交換・JWKSを�
     const token=await f.sign({});
     const mcp=await f.request('/mcp',{method:'POST',data:{jsonrpc:'2.0',id:1,method:'tools/list'},headers:{Authorization:'Bearer '+token,Accept:'application/json, text/event-stream'}});assert.equal(mcp.status,200);
   }finally{await f.close();}
+});
+
+
+test('サブパスで認証・投稿・ログアウトし、origin検証とHost cookieを維持する',async()=>{
+ const f=await fixture({basePath:'/novel',internalRouting:true});try{
+  assert.equal((await f.request('/../api/me')).status,404);
+  assert.equal((await f.request('/api/stories')).status,401);
+  const html=await (await f.request('/')).text();assert.match(html,/src="\.\/app.js"/);
+  assert.equal((await f.request('/app.js')).status,200);
+  const login=await f.start();assert.equal(login.redirect.searchParams.get('redirect_uri'),f.auth.origin+'/novel/auth/callback');
+  const callback=await f.finish(login);assert.equal(callback.status,302);assert.equal(callback.headers.get('location'),f.auth.origin+'/novel/');
+  assert.match(callback.headers.getSetCookie().find(c=>c.startsWith('__Host-session=')),/Path=\/;.*Secure/);
+  const token=session(callback);
+  const me=await (await f.request('/api/me',{cookie:token})).json();assert.equal(me.auth.loginUrl,'/novel/auth/login');
+  assert.equal((await f.request('/api/stories',{method:'POST',cookie:token,data:{title:'subpath',chapterTitle:'one',body:'text'}})).status,201);
+  assert.equal((await f.request('/api/stories',{method:'POST',cookie:token,data:{},headers:{Origin:f.auth.origin+'/novel'}})).status,403);
+  const logout=await (await f.request('/api/logout',{method:'POST',cookie:token,data:{}})).json();
+  assert.equal(new URL(logout.logoutUrl).searchParams.get('post_logout_redirect_uri'),f.auth.origin+'/novel/');
+  assert.equal((await f.request('/api/stories',{cookie:token})).status,401);
+ }finally{await f.close();}
 });

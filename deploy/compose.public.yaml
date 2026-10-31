@@ -8,9 +8,10 @@ services:
       - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PUBLISH_PORT:-${HTTPS_PORT:-443}}:443"
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST}
+      APP_BASE_PATH: ${APP_BASE_PATH:-}
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
       HTTPS_PORT: ${HTTPS_PORT:-443}
-      NGINX_ENVSUBST_FILTER: ^(PUBLIC_HOST|APP_ORIGIN|HTTPS_PORT)$
+      NGINX_ENVSUBST_FILTER: ^(PUBLIC_HOST|APP_ORIGIN|APP_BASE_PATH|HTTPS_PORT)$
     volumes:
       - ${NGINX_TEMPLATE:-./nginx/default.conf.template}:/etc/nginx/templates/default.conf.template:ro
       - ${TLS_DIR:?Set TLS_DIR}:/etc/nginx/tls:ro
@@ -32,6 +33,7 @@ services:
     environment:
       NODE_ENV: production
       AUTH_MODE: oidc
+      APP_BASE_PATH: ${APP_BASE_PATH:-}
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
       COOKIE_SECURE: 'true'
       OIDC_ISSUER: ${APP_ORIGIN}/id/realms/novel-branches
@@ -79,6 +81,7 @@ services:
       KC_HEALTH_ENABLED: 'true'
       JAVA_OPTS_KC_HEAP: ${KC_HEAP:--Xms64m -Xmx256m}
       # Realm-import placeholders; not rendered into tracked files.
+      APP_BASE_PATH: ${APP_BASE_PATH:-}
       APP_ORIGIN: ${APP_ORIGIN}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
     volumes:

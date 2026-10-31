@@ -19,6 +19,12 @@ async function request(path,method='GET',data,token){
 const r=await fetch(base+'/realms/master/protocol/openid-connect/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:'admin-cli',grant_type:'password',username:c.admin,password:c.secret})});
 if(!r.ok)throw Error('Admin authentication failed: '+r.status);
 const token=(await r.json()).access_token,realm='/admin/realms/novel-branches';
+if(c.configure){
+ const [client]=await request(realm+'/clients?clientId=novel-web','GET',null,token);
+ if(!client)throw Error('Web client not found');
+ const home=c.origin+c.basePath+'/';
+ await request(realm+'/clients/'+client.id,'PUT',{redirectUris:[home+'auth/callback'],webOrigins:[c.origin],rootUrl:home,baseUrl:home,attributes:{...client.attributes,'post.logout.redirect.uris':home,'backchannel.logout.url':'http://app:3000'+c.basePath+'/auth/backchannel-logout'}},token);
+}
 for(const u of c.users){
  const existing=await request(realm+'/users?exact=true&username='+encodeURIComponent(u.username),'GET',null,token);
  if(c.disable){if(existing.length){await request(realm+'/users/'+existing[0].id,'PUT',{enabled:false},token);await request(realm+'/users/'+existing[0].id+'/logout','POST',null,token);}continue;}
@@ -30,15 +36,17 @@ for(const u of c.users){
  if(existing.length)await request(realm+'/users/'+created.id+'/reset-password','PUT',{type:'password',value:u.password,temporary:u.temporary},token);
  if(u.member){const role=await request(realm+'/roles/novel-member','GET',null,token);await request(realm+'/users/'+created.id+'/role-mappings/realm','POST',[role],token);}
 }
-console.log(c.disable?'Verification users disabled':'Users created');
+console.log(c.configure?'Web callback/logout URLs configured':c.disable?'Verification users disabled':'Users created');
 } catch(e) { console.error(e.message);process.exitCode=1; }
 '''
 p=argparse.ArgumentParser()
-p.add_argument('--username');p.add_argument('--display-name');p.add_argument('--email')
+p.add_argument('--configure-web',action='store_true');p.add_argument('--username');p.add_argument('--display-name');p.add_argument('--email')
 p.add_argument('--create-verification',action='store_true');p.add_argument('--disable-verification',action='store_true')
 a=p.parse_args();cfg=envfile('deploy/.env');users=[]
 verify=Path('deploy/.test/public.env')
-if a.create_verification:
+if a.configure_web:
+    pass
+elif a.create_verification:
     verify.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
     if verify.exists():
         values=envfile(verify)
@@ -49,8 +57,12 @@ if a.create_verification:
     for name in ['member','other','outsider']:
         password=secrets.token_urlsafe(32) if fresh else values['TEST_'+name.upper()+'_PASSWORD'];values['TEST_'+name.upper()+'_PASSWORD']=password
         users.append(dict(username=values['TEST_USER_PREFIX']+name,display='Test',last=name,email=values['TEST_USER_PREFIX']+name+'@example.invalid',password=password,temporary=False,member=name!='outsider'))
+    values['APP_ORIGIN']=cfg['APP_ORIGIN']
+    values['APP_BASE_PATH']=cfg.get('APP_BASE_PATH','')
     if fresh:
         with os.fdopen(os.open(verify,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600),'w') as f:f.write(''.join(k+'='+v+'\n' for k,v in values.items()))
+    else:
+        verify.write_text(''.join(k+'='+v+'\n' for k,v in values.items()))
 elif a.disable_verification:
     values=envfile(verify)
     users=[dict(username=values['TEST_USER_PREFIX']+n) for n in ['member','other','outsider']]
@@ -59,7 +71,7 @@ else:
     password=getpass.getpass('Initial temporary password (at least 12 characters): ')
     if len(password)<12 or password!=getpass.getpass('Repeat password: '):p.error('Passwords must match and contain at least 12 characters')
     users=[dict(username=a.username,display=a.display_name,email=a.email,password=password,temporary=True,member=True)]
-r=subprocess.run(DC+['exec','-T','app','node','--input-type=module','-e',JS],input=json.dumps(dict(admin=cfg.get('KC_ADMIN_USER','admin'),secret=cfg['KC_ADMIN_PASSWORD'],users=users,disable=a.disable_verification,resume=a.create_verification)),text=True,capture_output=True)
+r=subprocess.run(DC+['exec','-T','app','node','--input-type=module','-e',JS],input=json.dumps(dict(admin=cfg.get('KC_ADMIN_USER','admin'),secret=cfg['KC_ADMIN_PASSWORD'],users=users,disable=a.disable_verification,resume=a.create_verification,configure=a.configure_web,origin=cfg['APP_ORIGIN'],basePath=cfg.get('APP_BASE_PATH',''))),text=True,capture_output=True)
 if r.returncode:
     message=r.stderr.strip()
     for secret in [cfg['KC_ADMIN_PASSWORD']]+[u.get('password','') for u in users]:

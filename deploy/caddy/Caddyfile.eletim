@@ -1,5 +1,17 @@
-# Replace /home/ubuntu/notify-server/Caddyfile only after authorizing ntfy URL replacement.
-# The nginx service joins the existing notify-server_default network.
 eletim.jp {
-    reverse_proxy novel-public-nginx-1:80
+    redir / /novel/ 302
+    redir /novel /novel/ 308
+    handle /novel/* {
+        reverse_proxy novel-public-nginx-1:80
+    }
+    @login path /id/realms/novel-branches/* /id/resources/*
+    handle @login {
+        reverse_proxy novel-public-nginx-1:80
+    }
+    handle /ntfy* {
+        respond "ntfy has been retired; subpath hosting is unsupported." 410
+    }
+    handle {
+        respond 404
+    }
 }

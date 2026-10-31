@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import { timingSafeEqual } from 'node:crypto';
 import { Store, AppError } from './store.mjs';
 import { rpc } from './mcp.mjs';
-import { authSettings, OidcAuth, cookie, sessionCookie } from './auth.mjs';
+import { authSettings, OidcAuth, cookie, sessionCookie, appBasePath } from './auth.mjs';
 
 const staticFiles = {'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 function equal(a,b) { return typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b)); }
@@ -19,12 +19,12 @@ async function body(req) {
   try { const value = JSON.parse(raw); if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(); return value; }
   catch { throw new AppError('JSONの形式が不正です。'); }
 }
-export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN, origin = process.env.APP_ORIGIN, secureCookies = process.env.COOKIE_SECURE === 'true', auth = authSettings()} = {}) {
+export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN, origin = process.env.APP_ORIGIN, secureCookies = process.env.COOKIE_SECURE === 'true', auth = authSettings(), basePath = auth.basePath ?? appBasePath()} = {}) {
   const attempts = new Map();
   const identity = auth.mode === 'oidc' ? new OidcAuth(store,auth) : null;
   if (identity && origin !== auth.origin) throw Error('APP_ORIGIN must match OIDC origin');
   if (identity && !auth.allowHttp && !secureCookies) throw Error('OIDC requires secure cookies');
-  const authInfo = {mode:auth.mode,loginUrl:identity ? '/auth/login' : null};
+  const authInfo = {mode:auth.mode,loginUrl:identity ? basePath+'/auth/login' : null};
   const loginCookie = (value,maxAge=600) => `${secureCookies ? '__Host-oidc-login' : 'oidc_login'}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secureCookies ? '; Secure' : ''}`;
   const server = http.createServer(async (req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -33,6 +33,13 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
     const send = (status,data) => { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(data === undefined ? undefined : JSON.stringify(data)); };
     try {
       const url = new URL(req.url,'http://localhost');
+      // Health is internal and remains independent of the browser mount path.
+      if (url.pathname === '/health') return send(200,{status:'ok'});
+      if (basePath) {
+        if (url.pathname === basePath) {res.writeHead(308,{Location:basePath+'/'});res.end();return;}
+        if (!url.pathname.startsWith(basePath+'/')) throw new AppError('見つかりません。',404);
+        url.pathname=url.pathname.slice(basePath.length);
+      }
       const expectedOrigin = origin || `http://${req.headers.host}`;
       if (url.pathname.startsWith('/api/') && !['GET','HEAD'].includes(req.method) && identity && req.headers.origin !== expectedOrigin) throw new AppError('操作元を確認できません。',403);
       if (req.headers.origin && req.headers.origin !== expectedOrigin) throw new AppError('この接続元からの操作は許可されていません。',403);
@@ -50,7 +57,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
           const login = await identity.callback(new URL(req.url,auth.origin),cookie(req,secureCookies ? '__Host-oidc-login' : 'oidc_login'));
           store.logout(cookie(req,secureCookies ? '__Host-session' : 'session'));
           res.setHeader('Set-Cookie',[loginCookie('',0),sessionCookie(login.token,{secure:secureCookies,maxAge:login.maxAge})]);
-          return redirect(auth.origin+'/');
+          return redirect(auth.origin+basePath+'/');
         }
         if (url.pathname === '/auth/backchannel-logout' && req.method === 'POST') {
           if (!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')) throw new AppError('Invalid logout content type',415);

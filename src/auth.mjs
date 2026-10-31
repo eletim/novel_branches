@@ -9,17 +9,24 @@ export function cookie(req, name) {
 export function sessionCookie(token, { secure = false, maxAge = 0 } = {}) {
   return `${secure ? '__Host-session' : 'session'}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
 }
+// Keep the web origin separate from its mount path (Origin headers never include paths).
+export function appBasePath(env = process.env) {
+  const path = (env.APP_BASE_PATH || '').replace(/\/$/, '');
+  if (path && !/^(\/[A-Za-z0-9_-]+)+$/.test(path)) throw Error('Invalid APP_BASE_PATH');
+  return path;
+}
 export function authSettings(env = process.env) {
   const mode = env.AUTH_MODE || 'local';
   if (!['local','oidc'].includes(mode)) throw Error('AUTH_MODE must be local or oidc');
   if (env.NODE_ENV === 'production' && mode !== 'oidc') throw Error('Production requires AUTH_MODE=oidc');
-  if (mode === 'local') return { mode };
+  const basePath = appBasePath(env);
+  if (mode === 'local') return { mode, basePath };
   const origin = new URL(env.APP_ORIGIN), issuer = new URL(env.OIDC_ISSUER);
   const allowHttp = env.OIDC_ALLOW_HTTP === 'true' && env.NODE_ENV !== 'production';
   if (origin.origin !== env.APP_ORIGIN || issuer.search || issuer.hash || issuer.username || issuer.password || origin.username || origin.password) throw Error('Invalid OIDC URL configuration');
   if (!allowHttp && (origin.protocol !== 'https:' || issuer.protocol !== 'https:' || env.COOKIE_SECURE !== 'true')) throw Error('OIDC requires HTTPS and COOKIE_SECURE=true');
   if (!env.OIDC_CLIENT_ID || !env.OIDC_CLIENT_SECRET || env.OIDC_CLIENT_SECRET.length < 32) throw Error('OIDC client ID and a secret of at least 32 characters are required');
-  return {mode,origin:origin.origin,issuer:issuer.href.replace(/\/$/,''),clientId:env.OIDC_CLIENT_ID,clientSecret:env.OIDC_CLIENT_SECRET,memberRole:env.OIDC_MEMBER_ROLE || 'novel-member',mcpAudience:env.OIDC_MCP_AUDIENCE || 'novel-mcp',internalIssuer:env.OIDC_INTERNAL_ISSUER,allowHttp};
+  return {mode,basePath,origin:origin.origin,issuer:issuer.href.replace(/\/$/,''),clientId:env.OIDC_CLIENT_ID,clientSecret:env.OIDC_CLIENT_SECRET,memberRole:env.OIDC_MEMBER_ROLE || 'novel-member',mcpAudience:env.OIDC_MCP_AUDIENCE || 'novel-mcp',internalIssuer:env.OIDC_INTERNAL_ISSUER,allowHttp};
 }
 export class OidcAuth {
   constructor(store, settings) {
@@ -55,7 +62,7 @@ export class OidcAuth {
     const config = await this.config();
     const state = oidc.randomState(), nonce = oidc.randomNonce(), verifier = oidc.randomPKCECodeVerifier(), browser = randomBytes(32).toString('hex');
     this.store.saveOidcLogin({state,nonce,verifier,browser});
-    const location = oidc.buildAuthorizationUrl(config,{redirect_uri:this.settings.origin+'/auth/callback',scope:'openid profile',response_type:'code',state,nonce,code_challenge:await oidc.calculatePKCECodeChallenge(verifier),code_challenge_method:'S256'});
+    const location = oidc.buildAuthorizationUrl(config,{redirect_uri:this.settings.origin+(this.settings.basePath || '')+'/auth/callback',scope:'openid profile',response_type:'code',state,nonce,code_challenge:await oidc.calculatePKCECodeChallenge(verifier),code_challenge_method:'S256'});
     return {location:location.href,browser};
   }
   async callback(url, browser) {
@@ -80,7 +87,7 @@ export class OidcAuth {
   async logoutUrl(token) {
     const idToken = this.store.sessionDetails(token)?.id_token;
     const config = await this.config();
-    return oidc.buildEndSessionUrl(config,{client_id:this.settings.clientId,post_logout_redirect_uri:this.settings.origin+'/',...(idToken ? {id_token_hint:idToken} : {})}).href;
+    return oidc.buildEndSessionUrl(config,{client_id:this.settings.clientId,post_logout_redirect_uri:this.settings.origin+(this.settings.basePath || '')+'/',...(idToken ? {id_token_hint:idToken} : {})}).href;
   }
   async verifyMcp(authorization) {
     if (!authorization?.startsWith('Bearer ')) throw new AppError('MCPのアクセストークンが必要です。',401);
