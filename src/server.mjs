@@ -43,7 +43,6 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
       const expectedOrigin = origin || `http://${req.headers.host}`;
       if (url.pathname.startsWith('/api/') && !['GET','HEAD'].includes(req.method) && identity && req.headers.origin !== expectedOrigin) throw new AppError('操作元を確認できません。',403);
       if (req.headers.origin && req.headers.origin !== expectedOrigin) throw new AppError('この接続元からの操作は許可されていません。',403);
-      if (url.pathname === '/health') return send(200,{status:'ok'});
       if (identity && url.pathname.startsWith('/auth/')) {
         const redirect = location => {res.writeHead(302,{Location:location,'Cache-Control':'no-store'});res.end();};
         if (url.pathname === '/auth/login' && req.method === 'GET') {

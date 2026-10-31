@@ -163,6 +163,7 @@ test('公開issuerを検証したまま、discovery・コード交換・JWKSを�
 test('サブパスで認証・投稿・ログアウトし、origin検証とHost cookieを維持する',async()=>{
  const f=await fixture({basePath:'/novel',internalRouting:true});try{
   assert.equal((await f.request('/../api/me')).status,404);
+  assert.equal((await f.request('/health')).status,404);
   assert.equal((await f.request('/api/stories')).status,401);
   const html=await (await f.request('/')).text();assert.match(html,/src="\.\/app.js"/);
   assert.equal((await f.request('/app.js')).status,200);

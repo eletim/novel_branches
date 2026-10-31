@@ -1,6 +1,6 @@
 # 公開サーバー用構成 — Keycloak × Nginx
 
-この変更では実環境への配置・DNS変更・証明書取得は行っていません。以下は配置時と隔離テスト用の手順です。
+一般的な配置・隔離テスト用の手順です。eletim.jpの最終配置・更新・バックアップは [eletim-vps.md](eletim-vps.md) を参照してください。
 
 ## 構成
 
@@ -28,7 +28,8 @@
 `deploy/.env.example` を `deploy/.env` にコピーし、以下を設定します。秘密値はGitに保存しません。
 
 - `PUBLIC_HOST`: ドメインのみ、例 `novels.example.com`
-- `APP_ORIGIN`: 実際のHTTPS URL、例 `https://novels.example.com`。末尾の `/` は付けません。
+- `APP_ORIGIN`: HTTPSのorigin、例 `https://novels.example.com`。パスと末尾の `/` は付けません。
+- `APP_BASE_PATH`: 任意の配置パス。ルートは空、サブパスなら `/novel`。静的ファイル・API・認証callback・ログアウトに反映します。Cookieは `__Host-` の要件に従いPath=/を維持します。既存realmでは `public-admin.py --configure-web` でクライアントURLも更新します。
 - `TLS_DIR`: `fullchain.pem` と `privkey.pem` がある絶対パス
 - `OIDC_CLIENT_SECRET`, `KC_DB_PASSWORD`, `KC_ADMIN_PASSWORD`: それぞれ独立した32文字以上のランダム値
 - `HTTP_PORT`, `HTTPS_PORT`: 通常は80と443。テストで異なるポートを使う場合、`APP_ORIGIN` にもHTTPSポートを含めます。
