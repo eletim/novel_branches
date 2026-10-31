@@ -1,0 +1,5 @@
+# Replace /home/ubuntu/notify-server/Caddyfile only after authorizing ntfy URL replacement.
+# The nginx service joins the existing notify-server_default network.
+eletim.jp {
+    reverse_proxy novel-public-nginx-1:80
+}

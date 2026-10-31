@@ -2,7 +2,7 @@
 
 配置先 `/home/ubuntu/novel_branches`。予定公開URL `https://eletim.jp/`。
 
-**配置作業中・未公開。** 既存ntfyからの切り替えは未承認・未実施。初回起動後にVPSへのSSH/HTTPS接続が失われ、復旧待ち。以下の公開後運用手順とバックアップ・復元は準備済みだが、実環境での検証は未完了。
+**配置作業中・未公開。** 既存ntfyからの切り替えは未承認・未実施。初回起動後にVPSへのSSH/HTTPS接続が失われ、SSHでKeycloakを停止して復旧済み。公開後運用手順を準備し、実環境での検証を進めている。
 既存の `/home/ubuntu/notify-server` のCaddyでTLS終端・HTTP転送・証明書自動更新を継続し、小説用Nginxへ内部ネットワークで転送する。ntfyのデータは保持する。Caddyを停止すると小説サイトも利用できなくなる。
 
 ## 起動・停止・ログ
@@ -21,7 +21,7 @@ dc logs --tail=100 app keycloak nginx
 
 Caddyのネットワーク `notify-server_default` を公開用Composeのedgeネットワークとして再利用する。アプリ・Keycloak・PostgreSQLはホストにポートを公開せず、内部ネットワークへ隔離。Nginxの8089/8449は127.0.0.1限定、8449のTLSリスナーはこの構成では使用しない。管理パス、master realm、healthはNginxで拒否する。
 
-秘密値は `deploy/.env` (0600)。再生成しない。`docker compose config` は `--quiet` を付け、`docker inspect` や環境変数の全出力を共有しない。1GB VPSに合わせKeycloakヒープは64–256MiB。swapなしのためメモリ使用状況を監視し、利用増加時は増強する。
+秘密値は `deploy/.env` (0600)。再生成しない。`docker compose config` は `--quiet` を付け、`docker inspect` や環境変数の全出力を共有しない。1GB VPSに合わせKeycloakヒープは64–160MiB、コンテナ上限512MiB。2GiBのswap `/var/swap.novel` を追加し `/etc/fstab` に登録済み。メモリ使用状況を監視し、利用増加時は増強する。
 
 ## 参加者追加
 
@@ -37,7 +37,7 @@ python3 scripts/public-admin.py --username alice --display-name 'アリス'
 1. ローカルで対象ブランチを選び、`npm ci && npm test`。変更をcommit・pushする。mainへ自動マージしない。
 2. VPSで `scripts/public-backup.sh` を実行し、両DB・秘密値・コミットを退避する。
 3. `git fetch origin`、差分を確認して配置ブランチを `git switch`、`git pull --ff-only`。GitHub認証がVPSにない場合はローカルからGit bundleを転送してfetchする。今回の初期転送はソースアーカイブのため、復旧後にVPS側のGit checkoutを整備する必要がある。秘密値や既存DBは転送しない。
-4. `dc config --quiet`、`dc build`、`dc up -d`。HTTPS、認証、既存作品を確認する。realm JSONの変更は既存realmに自動反映されないため、必要な管理API移行を別途実施する。
+4. `dc config --quiet`、`dc build`、`dc up -d`、`dc exec nginx nginx -s reload`（再作成されたコンテナのIPを再解決）。HTTPS、認証、既存作品を確認する。realm JSONの変更は既存realmに自動反映されないため、必要な管理API移行を別途実施する。
 5. DB移行を含む更新の取り消しは、同じ時点の両DBと対応コミットをセットで復元する。片方だけ過去に戻さない。
 
 ## バックアップ
@@ -75,4 +75,4 @@ openssl s_client -connect eletim.jp:443 -servername eletim.jp </dev/null 2>/dev/
 
 ## 2026-11-01 配置作業中の障害
 
-初回起動ではKeycloakのJavaヒープのみ256MiBに制限し、コンテナ全体の上限を設定していなかった。realm初期化完了後にVPSのSSH・HTTPSがタイムアウトし、pingのみ応答する状態を観測した。直前の空きメモリ約124MiBからメモリ逼迫を疑っているが、ホストログ未取得のため原因は未確定。公開先切り替え前に発生。修正でKeycloakコンテナ全体のメモリ上限を追加した。復旧後はswapまたはRAM増強と実メモリ測定を先に行い、安定するまで再公開しない。
+初回起動ではKeycloakのJavaヒープのみ256MiBに制限し、コンテナ全体の上限を設定していなかった。realm初期化完了後にVPSのSSH・HTTPSがタイムアウトし、pingのみ応答する状態を観測した。直前の空きメモリ約124MiBからメモリ逼迫を疑っているが、ホストログ未取得のため原因は未確定。公開先切り替え前に発生。修正でKeycloakコンテナ全体のメモリ上限を追加した。SSH経由でKeycloakを停止し復旧した。2GiBのswapを新設し永続化、Javaヒープ160MiB・メタスペース256MiB・コンテナ全体512MiBに設定した。128MiBのメタスペース制限は不足しJavaのOutOfMemoryErrorを確認したため増量した。VPSの再起動はしていない。
