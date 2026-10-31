@@ -11,7 +11,7 @@ restore_project="${2:?Supply a new, unused Compose project name}"
 dc=(docker compose -p "$restore_project" --env-file "$backup_dir/deployment.env" -f deploy/compose.public.yaml)
 "${dc[@]}" up -d --wait keycloak-db
 "${dc[@]}" exec -T keycloak-db pg_restore -U keycloak -d keycloak --no-owner --no-privileges --exit-on-error < "$backup_dir/keycloak.dump"
-"${dc[@]}" run --rm --no-deps -T --user 0 --entrypoint tar app xzf - -C /app/data < "$backup_dir/sqlite.tgz"
+"${dc[@]}" run --rm --no-deps -T --user 1000:1000 --entrypoint tar app xzf - -C /app/data < "$backup_dir/sqlite.tgz"
 "${dc[@]}" run --rm --no-deps -T --entrypoint node app --input-type=module -e '
 import {DatabaseSync} from "node:sqlite";
 const db=new DatabaseSync("/app/data/novels.db",{readOnly:true});

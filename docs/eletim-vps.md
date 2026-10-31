@@ -30,13 +30,13 @@ python3 scripts/public-admin.py --username alice --display-name 'アリス'
 # 必要なら --email alice@example.com を追加
 ```
 
-初回用パスワードを非表示プロンプトで2回入力する。履歴・引数・ログに秘密値を渡さない。参加者には `novel-member` が付与され、初回ログイン時にパスワード変更が必須。初回パスワードは本人へ別の安全な手段で連絡する。自己登録は無効。管理APIはDocker内部でのみ利用する。既存ユーザーは上書きしない。
+初回用パスワードを非表示プロンプトで2回入力する。履歴・引数・ログに秘密値を渡さない。参加者には `novel-member` が付与され、初回ログイン時にパスワード変更が必須。Keycloakの必須プロフィール（メール・姓など）が不足している場合も初回画面で本人が入力する。初回パスワードは本人へ別の安全な手段で連絡する。自己登録は無効。管理APIはDocker内部でのみ利用する。既存ユーザーは上書きしない。
 
 ## 更新
 
 1. ローカルで対象ブランチを選び、`npm ci && npm test`。変更をcommit・pushする。mainへ自動マージしない。
 2. VPSで `scripts/public-backup.sh` を実行し、両DB・秘密値・コミットを退避する。
-3. `git fetch origin`、差分を確認して配置ブランチを `git switch`、`git pull --ff-only`。GitHub認証がVPSにない場合はローカルからGit bundleを転送してfetchする。今回の初期転送はソースアーカイブのため、復旧後にVPS側のGit checkoutを整備する必要がある。秘密値や既存DBは転送しない。
+3. `git fetch origin`、差分を確認して配置ブランチを `git switch`、`git pull --ff-only`。GitHub認証がVPSにない場合はローカルからGit bundleを転送してfetchする。今回の初期転送後、Git bundleからVPS側のGit checkoutを整備済み。秘密値や既存DBは転送しない。
 4. `dc config --quiet`、`dc build`、`dc up -d`、`dc exec nginx nginx -s reload`（再作成されたコンテナのIPを再解決）。HTTPS、認証、既存作品を確認する。realm JSONの変更は既存realmに自動反映されないため、必要な管理API移行を別途実施する。
 5. DB移行を含む更新の取り消しは、同じ時点の両DBと対応コミットをセットで復元する。片方だけ過去に戻さない。
 
@@ -76,3 +76,14 @@ openssl s_client -connect eletim.jp:443 -servername eletim.jp </dev/null 2>/dev/
 ## 2026-11-01 配置作業中の障害
 
 初回起動ではKeycloakのJavaヒープのみ256MiBに制限し、コンテナ全体の上限を設定していなかった。realm初期化完了後にVPSのSSH・HTTPSがタイムアウトし、pingのみ応答する状態を観測した。直前の空きメモリ約124MiBからメモリ逼迫を疑っているが、ホストログ未取得のため原因は未確定。公開先切り替え前に発生。修正でKeycloakコンテナ全体のメモリ上限を追加した。SSH経由でKeycloakを停止し復旧した。2GiBのswapを新設し永続化、Javaヒープ160MiB・メタスペース256MiB・コンテナ全体512MiBに設定した。128MiBのメタスペース制限は不足しJavaのOutOfMemoryErrorを確認したため増量した。VPSの再起動はしていない。
+
+## 配置前検証結果
+
+- `npm test`: 20件成功。依存監査: 脆弱性0件。
+- VPS上の正式TLSを、SSHトンネルと専用Caddyから本番用Nginxへ接続して検証。証明書検証を無効化していない。既存の公開Caddy/ntfyの転送先は変更していない。
+- 実Chromium: 2人のログイン、ログアウト、参加ロールなし拒否、新作、続話、分岐、入れ子の分岐、各経路の読む順番、グッド追加/取消/重複抑止、検索・並べ替え、下書き、競合、別ユーザーへの誤投稿防止、PC/スマホ幅を確認。
+- 管理パス・master realm・healthは404、未ログインの作品APIは401。ログに秘密値・認可コードqueryの混入なし。
+- 全4サービスの再起動前後でユーザー・作品・分岐・本文・票のSHA256が一致。VPS自体は再起動していない。
+- バックアップから別プロジェクト `novel-restore-check-20261101-b` へ復元し、SQLite integrity OK、Keycloakユーザー4件を確認。検証用復元コンテナは停止済み、volumeは保持。
+- 検証用アカウントはランダムな `verify-` 接頭辞の3名。本番の初期realmにローカル検証ユーザーをインポートしていない。新規に作った「ブラウザ検証」作品は検証記録として保持する。終了時に専用3名を無効化し、Keycloakのセッションもログアウトする。
+- 外部からの本番URLの最終確認は、既存ntfyのURL置き換えの承認後に実施する。

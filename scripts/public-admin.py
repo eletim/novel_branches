@@ -21,11 +21,12 @@ if(!r.ok)throw Error('Admin authentication failed: '+r.status);
 const token=(await r.json()).access_token,realm='/admin/realms/novel-branches';
 for(const u of c.users){
  const existing=await request(realm+'/users?exact=true&username='+encodeURIComponent(u.username),'GET',null,token);
- if(c.disable){if(existing.length)await request(realm+'/users/'+existing[0].id,'PUT',{enabled:false},token);continue;}
+ if(c.disable){if(existing.length){await request(realm+'/users/'+existing[0].id,'PUT',{enabled:false},token);await request(realm+'/users/'+existing[0].id+'/logout','POST',null,token);}continue;}
  if(existing.length&&!c.resume)throw Error('User already exists; no changes made to that user');
  if(!existing.length)
- await request(realm+'/users','POST',{username:u.username,enabled:true,firstName:u.display,email:u.email||undefined,credentials:[{type:'password',value:u.password,temporary:u.temporary}],requiredActions:u.temporary?['UPDATE_PASSWORD']:[]},token);
+ await request(realm+'/users','POST',{username:u.username,enabled:true,firstName:u.display,lastName:u.last||undefined,email:u.email||undefined,credentials:[{type:'password',value:u.password,temporary:u.temporary}],requiredActions:u.temporary?['UPDATE_PASSWORD']:[]},token);
  const [created]=await request(realm+'/users?exact=true&username='+encodeURIComponent(u.username),'GET',null,token);
+ if(existing.length&&c.resume)await request(realm+'/users/'+created.id,'PUT',{firstName:u.display,lastName:u.last,email:u.email,enabled:true,requiredActions:[]},token);
  if(existing.length)await request(realm+'/users/'+created.id+'/reset-password','PUT',{type:'password',value:u.password,temporary:u.temporary},token);
  if(u.member){const role=await request(realm+'/roles/novel-member','GET',null,token);await request(realm+'/users/'+created.id+'/role-mappings/realm','POST',[role],token);}
 }
@@ -47,7 +48,7 @@ if a.create_verification:
     if fresh:values={'APP_ORIGIN':cfg['APP_ORIGIN'],'TEST_USER_PREFIX':'verify-'+secrets.token_hex(4)+'-'}
     for name in ['member','other','outsider']:
         password=secrets.token_urlsafe(32) if fresh else values['TEST_'+name.upper()+'_PASSWORD'];values['TEST_'+name.upper()+'_PASSWORD']=password
-        users.append(dict(username=values['TEST_USER_PREFIX']+name,display='Test '+name,password=password,temporary=False,member=name!='outsider'))
+        users.append(dict(username=values['TEST_USER_PREFIX']+name,display='Test',last=name,email=values['TEST_USER_PREFIX']+name+'@example.invalid',password=password,temporary=False,member=name!='outsider'))
     if fresh:
         with os.fdopen(os.open(verify,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600),'w') as f:f.write(''.join(k+'='+v+'\n' for k,v in values.items()))
 elif a.disable_verification:

@@ -72,4 +72,4 @@ try{
  assert.deepEqual(errors,[]);
  writeFileSync(out+'/browser.json',JSON.stringify({story,first,second,fork,third,nested,concurrent,forkBranch:forkBranch.id,nestedBranch:nestedBranch.id,css,fonts:fonts.fonts,firstReadUrl,errors},null,2));
  console.log('PASS browser: CSS/mobile, search/sort, drafts/reload, concurrent conflict retains text, navigation/error recovery, logout/user switch, denied role');
-}catch(e){let message=e.message.replace(/https:\/\/[^\s]+/g,'[URL omitted]');for(const [key,value] of Object.entries(process.env))if(/PASSWORD|SECRET/.test(key)&&value)message=message.replaceAll(value,'[secret omitted]');console.error('FAIL browser:',message);process.exitCode=1;}finally{await browser.close();}
+}catch(e){let message=(e.message+'\nPage: '+new URL(a.url()).pathname+'\n'+(await a.locator('body').innerText().catch(()=>'' )).slice(0,700)).replace(/https:\/\/[^\s]+/g,'[URL omitted]');for(const [key,value] of Object.entries(process.env))if(/PASSWORD|SECRET/.test(key)&&value)message=message.replaceAll(value,'[secret omitted]');console.error('FAIL browser:',message);process.exitCode=1;}finally{await browser.close();}
