@@ -113,3 +113,5 @@ Caddy設定の単一ファイルbind mountが旧inodeを参照し、最初のrel
 
 ブラウザ検証: `TEST_STACK_ENV=deploy/.test/public.env npm run test:browser`。
 セッションの実時間期限確認: `node scripts/test-public-expiry.mjs`（約5分、パスワードgrantは使用しない）。認証情報・trace/HARは出力しない。証跡はローカルのGit管理外 `deploy/.test/evidence`。検証アカウントは終了後 `python3 scripts/public-admin.py --disable-verification` で無効化・ログアウトする。検証作品は既存作品とともに保持する。
+
+公開後の実ブラウザ確認は全件成功。HTTPS・静的ファイル・未ログイン導線、2人のログイン/ログアウト、新作/続話/分岐/入れ子、読書順/グッド、下書き・競合・誤投稿防止、PC/スマホ幅、`/novel/` のパス保持とロール拒否を確認。実時間約5分のCookie期限後、投稿401・下書き保持・Keycloak SSO・同じ作者IDでの下書き復元・ログアウトも成功。`/novel/health` を含む管理経路は404、未認証作品API401、`/ntfy/` は410。検証アカウント3名は終了後に再び無効化・セッション失効。新たな検証作品1件を含め計3件の検証作品を記録として保持し、既存作品は削除していない。

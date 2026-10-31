@@ -58,7 +58,7 @@ docker compose exec app node scripts/demo.mjs
 
 このComposeはローカル開発専用です。公開用には単独の `deploy/compose.public.yaml` を使います。
 
-データは名前付きvolume `novel-data` に保存します。ホストの公開先は127.0.0.1:3000です。2〜3人で共有する場合は、この前段にHTTPSのリバースプロキシ等を置き、下記の `APP_ORIGIN` と `COOKIE_SECURE` を合わせてください。ホスティング先はまだ固定していません。
+データは名前付きvolume `novel-data` に保存します。ホストの公開先は127.0.0.1:3000です。2〜3人で共有する場合は、この前段にHTTPSのリバースプロキシ等を置き、下記の `APP_ORIGIN` と `COOKIE_SECURE` を合わせてください。公開サイトの運用構成は [docs/eletim-vps.md](docs/eletim-vps.md) を参照してください。
 
 ## 設定
 
@@ -100,7 +100,7 @@ npm run dev
 - 投稿済みの話は編集・削除できません。分岐前の文章が後から変わる問題を避ける初期実装です。下書きは編集できます。
 - グッド順は作品内の各話の票を合計します。低評価の作品・話も保存され、閲覧できます。自動的な削除・非表示は行いません。
 - 公開登録、メール送信、コメント、AIによる執筆・変更、アプリ独自のパスワード再設定UIは未実装です。
-- HTTP MCPはBearer認証です（公開用はKeycloakのアクセストークン）。接続先クライアントがその認証方法を扱える必要があります。ChatGPTへの実接続と外部ホストへの配置は別途確認が必要です。
+- HTTP MCPはBearer認証です（公開用はKeycloakのアクセストークン）。接続先クライアントがその認証方法を扱える必要があります。ChatGPTへの実接続は別途確認が必要です。公開配置は実施済みです。
 - 単一プロセスとSQLiteの構成です。データを持つサーバーで起動してください。
 
 設計は [docs/architecture.md](docs/architecture.md)、作業状態は [docs/status.md](docs/status.md)。

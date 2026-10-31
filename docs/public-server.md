@@ -43,7 +43,7 @@ docker compose --env-file deploy/.env -f deploy/compose.public.yaml config --qui
 docker compose --env-file deploy/.env -f deploy/compose.public.yaml up -d --build
 ```
 
-本変更ではこれらを実環境で実行していません。既存のNginxが80/443を使用しているサーバーでは、そのNginxとの接続方法を配置時に合わせます。
+既存のWebサーバーが80/443を使用している場合は接続方法を合わせます。eletim.jpでは既存CaddyのTLS終端と内部Nginxを組み合わせています。
 
 ## ユーザーの追加
 
