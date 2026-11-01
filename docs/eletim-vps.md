@@ -291,3 +291,11 @@ Aaの見出しを「ビューアー設定」とし、文字サイズ→背景色
 メイリオはMeiryo/メイリオのローカルCSS指定のみで、未導入時は日本語ゴシックへフォールバックする。MicrosoftのフォントはpublicやGit/Dockerへ同梱しない。`node scripts/test-reader-fonts.mjs`（ローカル）、`node scripts/test-reader-fonts.mjs --public`（専用の公開検証アカウント有効化後）で本文の実描画フォントをCDP CSS.getPlatformFontsForNodeから確認する。通常のUbuntu ChromiumはNoto Sans CJK JPへのフォールバックを確認した。別のテストプロセス専用FONTCONFIG_FILEから、同じWindows端末に既存の `/mnt/c/Windows/Fonts/meiryo.ttc` を参照するとMeiryo・isCustomFont=falseの実描画を確認した。テスト用参照はGit管理外のsymlink/設定だけで、元ファイルをコピー・配信せず、通常環境のフォント設定も変更しない。ホストに該当フォントがない環境では実Meiryo検証はSKIPと明示する。
 
 明朝ラベルの見本を表示するため、既存の同梱OFL明朝は明朝選択時に加え、設定を開いたときにも必要に応じて読み込まれる。UI以外の作品データ・利用者設定は変更しない。
+
+公開結果: 自動テスト38件、公開実ChromiumのPC/375pxで全選択肢と等分/隣接配置、4配色の本文・リンク・補助文字・操作部品/色見本のコントラスト4.5以上、最大サイズの横溢れ防止、サイズ別ラベル、3字体、radio/checkedのアクセシビリティツリー、矢印/Home/End/Tab/Enter/Escape、即時反映・保存・次話/再読込・初期化、旧20px/明朝/黒の移行も成功。広げた本文幅はPC1056px/375px画面351pxのまま。既存編集/作品管理者/競合/下書き/ホーム/分岐/認証も成功した。公開実本文のフォントは未導入環境でNoto Sans CJK JP、Windows既存Meiryoを参照するChromiumでMeiryo（11 glyphs、isCustomFont=false）をCDPで確認した。Windows Chrome本体ではなくWSL Chromiumによる実フォント描画の検証で、フォントファイルは配布していない。実音声読み上げソフトの操作は未実施で、ARIA/ブラウザアクセシビリティツリーで確認した。
+
+設定画面と水色本文のPC/375px画像は `/home/koji/novel-ui-screenshots/20261101-viewer-segments/{viewer-settings,reader-blue}-{desktop,mobile}.png`。画像は専用ユーザー・作品と、メイリオ未登録のフォールバック環境で撮影している。描画検証の詳細はGit管理外 `deploy/.test/font-rendering/public.json`。既存データと管理者割当は反映直後/検証後のDB比較で保持を確認した。検証で追加した16作品は非表示で記録として保持する。
+
+最終追加確認: 公開本文の水色/28pxで、PC1280px/スマートフォン375pxの両方において、通常環境はNoto Sans CJK JP、Windows既存フォント参照環境はMeiryoをCDPで確認し、横溢れもない。MCPのinitialize/tools/list/tools/callと4ツール、OAuth/PKCE・権限拒否・refresh・実時間の期限切れ401と更新後の復帰まで成功した。実機スマートフォン、Windows Chrome本体、実音声読み上げソフト、ChatGPT本体の再接続は未実施。
+
+最終両DBバックアップ: `/home/ubuntu/novel-backups/20261101T131633Z`（04481d0、最終結果追記前）。既存データ・ユーザー・秘密値・volume・管理者割当を保持し、検証用3名は無効化・ログアウト・専用MCP offline grant取消済み。本人アカウントのパスワードやプロフィールは変更していない。
