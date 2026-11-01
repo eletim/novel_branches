@@ -13,7 +13,7 @@ async function api(path,method='GET',data,expectedUserId=user?.id) {
 }
 function toast(message) {clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').style.display='block';toastTimer=setTimeout(()=>$('#toast').style.display='none',3500);}
 function nav() {
-  $('#nav').innerHTML = user ? `<span class="username">${esc(user.display_name)}</span><button class="small" id="write">＋ 作品を書く</button><button class="secondary small" id="logout">ログアウト</button>` : '<span class="meta">小さな創作の部屋</span>';
+  $('#nav').innerHTML = user ? `<span class="username">${esc(user.display_name)}</span><button class="quiet small" id="write">作品を書く</button><button class="quiet small" id="logout">ログアウト</button>` : '<span class="meta">小さな創作の部屋</span>';
   if(user) {$('#write').onclick=()=>editor('new');$('#logout').onclick=async()=>{try{const result=await api('/logout','POST',{});if(result.logoutUrl){location.assign(result.logoutUrl);return;}user=null;nav();await render();}catch(e){toast(e.message);}};}
 }
 function login() {
@@ -25,8 +25,7 @@ async function library(params,generation) {
   const q=params.get('q')||'', sort=params.get('sort')||'new', offset=Math.max(0,Number(params.get('offset'))||0);
   const {stories}=await api(`/stories?q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&offset=${offset}&limit=12`);
   if(generation!==viewGeneration)return;
-  app.innerHTML=`<section class="hero"><div><span class="eyebrow">READ · BRANCH · WRITE</span><h1>物語の先に、<br>あなたの世界を。</h1><p>好きな話の、その先から。<br>別の続きを書いて、もうひとつの世界を育てよう。</p><button id="hero-write" class="secondary">最初の一話を書く ↗</button></div>${art()}</section><section><div class="toolbar"><h2>物語を見つける <span class="meta">/ LIBRARY</span></h2><form class="search" id="search"><input name="q" aria-label="作品を検索" placeholder="作品名・あらすじで探す" value="${esc(q)}" maxlength="200"><select name="sort" aria-label="並び順"><option value="new" ${sort==='new'?'selected':''}>新着順</option><option value="popular" ${sort==='popular'?'selected':''}>グッド順</option></select><button class="secondary small">検索</button></form></div><div class="cards">${stories.map(s=>`<a class="card" href="#story/${s.id}"><div class="book-cover"><span>物 語 の 種</span></div><div class="card-content"><span class="tag">${s.branch_count>1?'広がる平行世界':'はじまりの物語'}</span><h3>${esc(s.title)}</h3><div class="meta">${esc(s.author)}</div><p class="summary">${esc(s.summary||'ここから、物語がはじまります。')}</p><div class="stats"><span>⑂ ${s.branch_count}つの展開</span><span>全${s.chapter_count}話</span><span>♡ ${s.likes}</span></div></div></a>`).join('') || `<div class="empty"><h3>${q?'作品が見つかりませんでした':'最初の物語を、ここから。'}</h3><p>${q?'検索する言葉を変えてみてください。':'「作品を書く」から、第一話を投稿できます。'}</p></div>`}</div><div class="pagination">${offset?'<button class="secondary" id="prev">← 前のページ</button>':''}${stories.length===12?'<button class="secondary" id="next">次のページ →</button>':''}</div></section>`;
-  $('#hero-write').onclick=()=>editor('new');
+  app.innerHTML=`<section><div class="toolbar"><h2>作品一覧</h2><form class="search" id="search"><input name="q" aria-label="作品を検索" placeholder="作品名・あらすじで探す" value="${esc(q)}" maxlength="200"><select name="sort" aria-label="並び順"><option value="new" ${sort==='new'?'selected':''}>新着順</option><option value="popular" ${sort==='popular'?'selected':''}>グッド順</option></select><button class="secondary small">検索</button></form></div><div class="cards">${stories.map(s=>`<a class="card" href="#story/${s.id}"><div class="card-content"><h3>${esc(s.title)}</h3><div class="meta">${esc(s.author)}</div><p class="summary">${esc(s.summary||'ここから、物語がはじまります。')}</p><div class="stats"><span>⑂ ${s.branch_count}つの展開</span><span>全${s.chapter_count}話</span><span>♡ ${s.likes}</span></div></div></a>`).join('') || `<div class="empty"><h3>${q?'作品が見つかりませんでした':'最初の物語を、ここから。'}</h3><p>${q?'検索する言葉を変えてみてください。':'「作品を書く」から、第一話を投稿できます。'}</p></div>`}</div><div class="pagination">${offset?'<button class="secondary" id="prev">← 前のページ</button>':''}${stories.length===12?'<button class="secondary" id="next">次のページ →</button>':''}</div></section>`;
   $('#search').onsubmit=e=>{e.preventDefault();location.hash='?'+new URLSearchParams(new FormData(e.currentTarget));};
   const page = n=>{params.set('offset',n);location.hash='?'+params;};
   if($('#prev'))$('#prev').onclick=()=>page(Math.max(0,offset-12));if($('#next'))$('#next').onclick=()=>page(offset+12);
@@ -35,30 +34,41 @@ function updatedTime(chapter) {
   const raw=chapter.updated_at||chapter.created_at,date=new Date(raw);
   return `<time datetime="${esc(raw)}" title="${esc(date.toLocaleString('ja-JP'))}">${esc(date.toLocaleString('ja-JP',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}))}</time>`;
 }
+function episodeRow(c,index,href) {
+  return `<span class="toc-number">第${index+1}話</span><a class="toc-title" href="${href}">${esc(c.title)}</a><span class="toc-meta"><span class="toc-author">${esc(c.author)}</span>${updatedTime(c)}</span>`;
+}
+function branchButton(id,number) {
+  return `<button class="branch-toggle" aria-label="第${number}話のほかの分岐" aria-expanded="false" aria-controls="${id}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V12M12 12L5 6V3M12 12l7-6V3"/></svg></button>`;
+}
+function bindBranches() {
+  document.querySelectorAll('.branch-toggle').forEach(button=>button.onclick=()=>{const open=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!open));document.getElementById(button.getAttribute('aria-controls')).hidden=open;});
+}
+function candidateRows(story,c,index,branch) {
+  return candidatesFor(story,c).filter(candidate=>candidate.id!==c.id).map(candidate=>`<div class="toc-candidate" data-candidate="${candidate.id}">${episodeRow(candidate,index,`#chapter/${candidate.id}?branch=${branchForCandidate(story,candidate,branch.id)}`)}</div>`).join('');
+}
 async function storyView(id,generation,params) {
   const story=await api('/stories/'+id),{branch,path}=selectReading(story,params.get('branch'));
   if(generation!==viewGeneration)return;
-  const row=(c,index,href)=>`<span class="toc-number">第${index+1}話</span><a class="toc-title" href="${href}">${esc(c.title)}</a><span class="toc-author">${esc(c.author)}</span>${updatedTime(c)}`;
-  app.innerHTML=`<section class="story-toc"><a class="back" href="#">← 作品一覧へ</a><h1>${esc(story.title)}</h1><p class="meta story-creator">最初の制作者：${esc(story.author)}</p><p class="summary story-summary">${esc(story.summary)}</p><h2 class="sr-only">目次</h2><ol class="toc-list">${path.map((c,i)=>{
-    const candidates=candidatesFor(story,c);
-    return `<li class="toc-item" data-chapter="${c.id}"><div class="toc-row">${row(c,i,`#chapter/${c.id}?branch=${branch.id}`)}${candidates.length>1?`<button class="secondary small branch-toggle" aria-expanded="false" aria-controls="candidates-${c.id}">branch - ${candidates.length}</button>`:'<span></span>'}</div><div class="toc-candidates" id="candidates-${c.id}" hidden>${candidates.map(candidate=>`<div class="toc-candidate ${candidate.id===c.id?'selected':''}" data-candidate="${candidate.id}">${row(candidate,i,`#story/${story.id}?branch=${branchForCandidate(story,candidate,branch.id)}`)}${candidate.id===c.id?'<span class="meta">選択中</span>':''}</div>`).join('')}</div><button class="toc-alternate" data-alternate="${c.id}">第${i+1}話の別案を書く</button></li>`;
-  }).join('')}</ol><div class="toc-actions"><button id="append-story">続話を追加する</button></div></section>`;
-  document.querySelectorAll('.branch-toggle').forEach(button=>button.onclick=()=>{const open=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!open));document.getElementById(button.getAttribute('aria-controls')).hidden=open;});
-  document.querySelectorAll('[data-alternate]').forEach(button=>button.onclick=()=>editor('alternate',story.chapters.find(c=>c.id===Number(button.dataset.alternate)),branch.id));
-  $('#append-story').onclick=()=>editor('append',branch,branch.id);
+  app.innerHTML=`<section class="story-toc"><a class="back" href="#">← 作品一覧</a><h1>${esc(story.title)}</h1><p class="meta story-creator">最初の制作者：${esc(story.author)}</p><p class="summary story-summary">${esc(story.summary)}</p><h2 class="sr-only">目次</h2><ol class="toc-list">${path.map((c,i)=>`<li class="toc-item" data-chapter="${c.id}"><div class="toc-row">${episodeRow(c,i,`#chapter/${c.id}?branch=${branch.id}`)}${candidatesFor(story,c).length>1?branchButton('candidates-'+c.id,i+1):''}</div><div class="toc-candidates" id="candidates-${c.id}" hidden>${candidateRows(story,c,i,branch)}</div></li>`).join('')}</ol></section>`;
+  bindBranches();
 }
 async function chapterView(id,generation,params) {
   const c=await api('/chapters/'+id),story=await api('/stories/'+c.story_id);
   const {branch,path}=selectReading(story,params.get('branch'),c.id),index=path.findIndex(ch=>ch.id===c.id);
   const previous=path[index-1],next=path[index+1],suffix=`?branch=${branch.id}`;
   if(generation!==viewGeneration)return;
-  app.innerHTML=`<div class="reader-shell"><a class="back to-toc" href="#story/${c.story_id}${suffix}">← ${esc(story.title)} · 目次</a><div class="reader-heading"><span class="eyebrow">第${index+1}話</span><h1>${esc(c.title)}</h1><div class="meta chapter-creator">制作者：${esc(c.author)} · 最終更新 ${updatedTime(c)}</div></div><article class="reader-body">${esc(c.body)}</article><div class="reader-actions"><button id="like" class="${c.liked?'liked':'secondary'}" aria-pressed="${!!c.liked}">${c.liked?'♥':'♡'} グッド ${c.likes}</button>${c.author_id===user.id?'<button id="edit-chapter" class="secondary">この話を編集</button>':''}<button id="alternate" class="secondary">この話の別案を書く</button><button id="fork" class="secondary">ここから分岐を書く</button>${branch.head_id===c.id?'<button id="append">続話を追加する</button>':''}</div><nav class="chapter-nav" aria-label="話の前後移動">${previous?`<a class="previous-chapter" href="#chapter/${previous.id}${suffix}">← 前の話：${esc(previous.title)}</a>`:'<span></span>'}${next?`<a class="next-chapter" href="#chapter/${next.id}${suffix}">次の話：${esc(next.title)} →</a>`:'<span></span>'}</nav><p class="hint">共通の話の編集は、その話を参照するすべての経路に反映されます。</p></div>`;
-  $('#fork').onclick=()=>editor('fork',c,branch.id);$('#alternate').onclick=()=>editor('alternate',c,branch.id);
-  if($('#append'))$('#append').onclick=()=>editor('append',branch,branch.id);
-  if($('#edit-chapter'))$('#edit-chapter').onclick=()=>editor('edit',c,branch.id);
-  $('#like').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const updated=await api(`/chapters/${c.id}/like`,'PUT',{liked:!c.liked});c.liked=updated.liked;button.textContent=`${c.liked?'♥':'♡'} グッド ${updated.likes}`;button.className=c.liked?'liked':'secondary';button.setAttribute('aria-pressed',!!c.liked);}catch(err){toast(err.message);}finally{button.disabled=false;}};
+  app.innerHTML=`<div class="reader-shell"><div class="reader-top"><a class="back to-toc" href="#story/${c.story_id}${suffix}">${esc(story.title)} · 目次</a><button class="quiet small" id="open-editor">Editor</button></div><div class="reader-heading"><span class="eyebrow">第${index+1}話</span><h1>${esc(c.title)}</h1><div class="meta chapter-creator">${esc(c.author)} · ${updatedTime(c)}</div>${candidatesFor(story,c).length>1?`<div class="reader-branches">${branchButton('reader-candidates',index+1)}<div id="reader-candidates" class="toc-candidates" hidden>${candidateRows(story,c,index,branch)}</div></div>`:''}</div><article class="reader-body">${esc(c.body)}</article><nav class="chapter-nav" aria-label="話の前後移動">${previous?`<a class="previous-chapter" href="#chapter/${previous.id}${suffix}">← ${esc(previous.title)}</a>`:'<span></span>'}<a class="to-toc" href="#story/${c.story_id}${suffix}">目次</a>${next?`<a class="next-chapter" href="#chapter/${next.id}${suffix}">${esc(next.title)} →</a>`:'<span></span>'}</nav><div class="reader-actions"><button id="like" class="quiet ${c.liked?'liked':''}" aria-pressed="${!!c.liked}">${c.liked?'♥':'♡'} グッド ${c.likes}</button></div></div>`;
+  bindBranches();
+  $('#open-editor').onclick=()=>{
+    dialog.innerHTML=`<div class="dialog-head"><h2>Editor</h2><button class="quiet small" id="close-editor" aria-label="閉じる">✕</button></div><div class="editor-menu">${c.author_id===user.id?'<button id="edit-chapter" class="secondary">この話の編集</button>':''}${branch.head_id===c.id?'<button id="append" class="secondary">次の話の追加</button>':''}<button id="alternate" class="secondary">この話の別案</button><button id="fork" class="secondary">次の話から分岐</button></div><p class="hint">編集はこの話の制作者のみ。続話・別案・分岐は参加者なら追加できます。途中の話から続きを作る場合は「次の話から分岐」を選んでください。</p>`;
+    $('#close-editor').onclick=()=>dialog.close();
+    for(const [selector,mode,context] of [['#edit-chapter','edit',c],['#append','append',branch],['#alternate','alternate',c],['#fork','fork',c]])if($(selector))$(selector).onclick=()=>editor(mode,context,branch.id);
+    dialog.showModal();
+  };
+  $('#like').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const updated=await api(`/chapters/${c.id}/like`,'PUT',{liked:!c.liked});c.liked=updated.liked;button.textContent=`${c.liked?'♥':'♡'} グッド ${updated.likes}`;button.className=c.liked?'quiet liked':'quiet';button.setAttribute('aria-pressed',!!c.liked);}catch(err){toast(err.message);}finally{button.disabled=false;}};
 }
 function editor(mode,context={},readingBranch=0) {
+  if(dialog.open)dialog.close();
   const editingUserId=user.id,draftKey=`novel-branches:draft:${editingUserId}:${mode}:${context.id||0}`;
   let draft={};try{draft=JSON.parse(localStorage.getItem(draftKey)||'{}');}catch{}
   const field=(name,label,max,value='',textarea=false)=>`<label for="edit-${name}">${label}</label>${textarea?`<textarea class="${name==='summary'?'short':''}" id="edit-${name}" name="${name}" maxlength="${max}" ${name==='summary'?'':'required'}>${esc(draft[name]??value)}</textarea>`:`<input id="edit-${name}" name="${name}" maxlength="${max}" value="${esc(draft[name]??value)}" required>`}`;

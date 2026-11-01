@@ -163,3 +163,11 @@ v3移行後の取り消しは、この更新前の両DBバックアップと対�
 公開後のDBも比較し、更新前のすべてのユーザー・作品・分岐・話・グッド・OIDC対応情報の既存列が保持されることを確認した。今回の検証作品1件と10話は削除せず記録として保持する。
 
 検証終了後、専用3アカウントを無効化・ログアウトし、novel-chatgptの同意/offline grantを取り消した。最終両DBバックアップは `/home/ubuntu/novel-backups/20261101T033537Z`（更新後コードd6c57a3、文書への最終結果追記前）。秘密値・Caddy設定・対応コミットを含む。kojiは変更しない。
+
+## 読者向けUIの整理（2026-11-01）
+
+反映前の両DBバックアップ: `/home/ubuntu/novel-backups/20261101T035646Z`（1a8b757）。今回はフロントエンドと検証スクリプトの変更で、DB/Keycloak/秘密値/volumeの変更は不要。
+
+目次は話数・タイトルを中心に、作者と更新日時を小さく表示する。右端のSVG分岐アイコンはスクリーンリーダー名・aria-expanded/aria-controls付き。候補は同じ親の他の話だけで、タイトルから本文へ移動し選択経路を引き継ぐ。目次から執筆操作を除いた。本文は目次・前後移動・分岐・グッドを残し、右上の小さなEditorから本人の編集/最新話への続話/同じ話の別案/次話からの分岐を開く。権限・revision/head競合検出・下書きキーは変更していない。ヘッダーの新作投稿を控えめにし、一覧の大きな執筆案内を除いた。
+
+検証は `npm test`、`node scripts/test-episodes-browser.mjs --local`、VPS反映後の `TEST_STACK_ENV=deploy/.test/public.env npm run test:browser` を使用する。ブラウザ検証は候補の本文遷移、目次/前後移動/再読込の経路、モバイルの分岐/Editor操作、執筆ボタンが閲覧画面に出ないこと、本人編集/他者拒否/他者続話、競合と失敗時の入力・下書き保持を含む。公開環境の目次・本文のPC/375px画像はGit管理外 `deploy/.test/evidence/episodes-public/{toc,reader}-{desktop,mobile}.png`。
