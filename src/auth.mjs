@@ -26,7 +26,7 @@ export function authSettings(env = process.env) {
   if (origin.origin !== env.APP_ORIGIN || issuer.search || issuer.hash || issuer.username || issuer.password || origin.username || origin.password) throw Error('Invalid OIDC URL configuration');
   if (!allowHttp && (origin.protocol !== 'https:' || issuer.protocol !== 'https:' || env.COOKIE_SECURE !== 'true')) throw Error('OIDC requires HTTPS and COOKIE_SECURE=true');
   if (!env.OIDC_CLIENT_ID || !env.OIDC_CLIENT_SECRET || env.OIDC_CLIENT_SECRET.length < 32) throw Error('OIDC client ID and a secret of at least 32 characters are required');
-  return {mode,basePath,origin:origin.origin,issuer:issuer.href.replace(/\/$/,''),clientId:env.OIDC_CLIENT_ID,clientSecret:env.OIDC_CLIENT_SECRET,memberRole:env.OIDC_MEMBER_ROLE || 'novel-member',mcpAudience:env.OIDC_MCP_AUDIENCE || 'novel-mcp',internalIssuer:env.OIDC_INTERNAL_ISSUER,allowHttp};
+  return {mode,basePath,origin:origin.origin,issuer:issuer.href.replace(/\/$/,''),clientId:env.OIDC_CLIENT_ID,clientSecret:env.OIDC_CLIENT_SECRET,memberRole:env.OIDC_MEMBER_ROLE || 'novel-member',mcpAudience:env.OIDC_MCP_AUDIENCE || origin.origin+basePath+'/mcp',internalIssuer:env.OIDC_INTERNAL_ISSUER,allowHttp};
 }
 export class OidcAuth {
   constructor(store, settings) {

@@ -57,6 +57,7 @@ server {
 
     # Only this application's realm and login assets are exposed.
     # /id/admin, /id/realms/master and Keycloak management endpoints remain private.
+    location ^~ /id/realms/novel-branches/clients-registrations/ { return 404; }
     location ^~ /id/realms/novel-branches/ {
         limit_req zone=auth_requests burst=40 nodelay;
         limit_req_status 429;

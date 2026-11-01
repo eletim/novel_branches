@@ -24,6 +24,9 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
   const identity = auth.mode === 'oidc' ? new OidcAuth(store,auth) : null;
   if (identity && origin !== auth.origin) throw Error('APP_ORIGIN must match OIDC origin');
   if (identity && !auth.allowHttp && !secureCookies) throw Error('OIDC requires secure cookies');
+  const mcpResource = identity ? origin+basePath+'/mcp' : null;
+  const resourceMetadataUrl = identity ? origin+basePath+'/.well-known/oauth-protected-resource' : null;
+  const mcpChallenge = (invalid=false) => 'Bearer resource_metadata="'+resourceMetadataUrl+'", scope="novels:read"'+(invalid?', error="invalid_token"':'');
   const authInfo = {mode:auth.mode,loginUrl:identity ? basePath+'/auth/login' : null};
   const loginCookie = (value,maxAge=600) => `${secureCookies ? '__Host-oidc-login' : 'oidc_login'}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secureCookies ? '; Secure' : ''}`;
   const server = http.createServer(async (req,res) => {
@@ -33,6 +36,15 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
     const send = (status,data) => { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(data === undefined ? undefined : JSON.stringify(data)); };
     try {
       const url = new URL(req.url,'http://localhost');
+      // RFC 9728 path discovery and the explicitly advertised subpath alias.
+      if (identity && [basePath+'/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource'+basePath+'/mcp','/.well-known/oauth-protected-resource'].includes(url.pathname) && req.method==='GET') {
+        return send(200,{resource:mcpResource,authorization_servers:[auth.issuer],scopes_supported:['novels:read'],bearer_methods_supported:['header'],resource_name:'Novel Branches (read only)'});
+      }
+      // RFC 8414 places the well-known segment before an issuer path.
+      if (identity && url.pathname==='/.well-known/oauth-authorization-server'+new URL(auth.issuer).pathname && req.method==='GET') {
+        const metadata=(await identity.config()).serverMetadata();
+        return send(200,{issuer:metadata.issuer,authorization_endpoint:metadata.authorization_endpoint,token_endpoint:metadata.token_endpoint,jwks_uri:metadata.jwks_uri,response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],token_endpoint_auth_methods_supported:['client_secret_basic','client_secret_post'],code_challenge_methods_supported:['S256'],scopes_supported:['openid','profile','novels:read'],authorization_response_iss_parameter_supported:metadata.authorization_response_iss_parameter_supported===true});
+      }
       // Health is internal and remains independent of the browser mount path.
       if (url.pathname === '/health') return send(200,{status:'ok'});
       if (basePath) {
@@ -68,7 +80,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
       }
       if (url.pathname === '/mcp') {
         if (identity) {
-          try {await identity.verifyMcp(req.headers.authorization);} catch(e) {res.setHeader('WWW-Authenticate','Bearer');throw e;}
+          try {await identity.verifyMcp(req.headers.authorization);} catch(e) {const challenge=mcpChallenge(!!req.headers.authorization);res.setHeader('WWW-Authenticate',challenge);return send(401,{error:'MCP authorization required',_meta:{'mcp/www_authenticate':[challenge]}});}
         } else if (!mcpToken || !equal(req.headers.authorization,`Bearer ${mcpToken}`)) { res.setHeader('WWW-Authenticate','Bearer'); return send(401,{error:'MCP token required'}); }
         if (req.method !== 'POST') { res.setHeader('Allow','POST'); return send(405,{error:'Use POST; server-initiated SSE is not supported.'}); }
         if (!req.headers['content-type']?.includes('application/json')) return send(415,{error:'application/json required'});
@@ -78,7 +90,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
         if (version && !['2025-06-18','2025-03-26','2025-11-25'].includes(version)) return send(400,{error:'Unsupported MCP protocol version'});
         let message;
         try { message = await body(req); } catch { return send(400,{jsonrpc:'2.0',id:null,error:{code:-32700,message:'Parse error'}}); }
-        const result = rpc(store,message);
+        const result = rpc(store,message,{oauth:!!identity});
         return send(result ? 200 : 202,result || undefined);
       }
       if (url.pathname.startsWith('/api/')) {

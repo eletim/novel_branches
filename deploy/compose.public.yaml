@@ -41,7 +41,7 @@ services:
       OIDC_CLIENT_ID: novel-web
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Set OIDC_CLIENT_SECRET}
       OIDC_MEMBER_ROLE: novel-member
-      OIDC_MCP_AUDIENCE: novel-mcp
+      OIDC_MCP_AUDIENCE: ${OIDC_MCP_AUDIENCE:-novel-mcp}
     volumes:
       - novel-data:/app/data
     read_only: true
@@ -79,6 +79,7 @@ services:
       KC_HTTP_RELATIVE_PATH: /id
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: 'true'
+      KC_FEATURES: resource-indicators
       JAVA_OPTS_KC_HEAP: ${KC_HEAP:--Xms64m -Xmx256m}
       # Realm-import placeholders; not rendered into tracked files.
       APP_BASE_PATH: ${APP_BASE_PATH:-}

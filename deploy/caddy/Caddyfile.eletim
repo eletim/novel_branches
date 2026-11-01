@@ -4,6 +4,10 @@ eletim.jp {
     handle /novel/* {
         reverse_proxy novel-public-nginx-1:80
     }
+    @metadata path /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/novel/mcp /.well-known/oauth-authorization-server/id/realms/novel-branches
+    handle @metadata {
+        reverse_proxy novel-public-nginx-1:80
+    }
     @login path /id/realms/novel-branches/* /id/resources/*
     handle @login {
         reverse_proxy novel-public-nginx-1:80

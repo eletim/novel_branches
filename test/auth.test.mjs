@@ -179,3 +179,21 @@ test('サブパスで認証・投稿・ログアウトし、origin検証とHost 
   assert.equal((await f.request('/api/stories',{cookie:token})).status,401);
  }finally{await f.close();}
 });
+
+
+test('MCP discoveryはサブパス・issuer・scopeを公開し、本文はOAuth検証後にだけ返す',async()=>{
+ const f=await fixture({basePath:'/novel',internalRouting:true});try{
+  f.auth.mcpAudience=f.auth.origin+'/novel/mcp';
+  const meta=await (await f.request('/.well-known/oauth-protected-resource')).json();
+  assert.equal(meta.resource,f.auth.mcpAudience);assert.deepEqual(meta.authorization_servers,[f.auth.issuer]);assert.deepEqual(meta.scopes_supported,['novels:read']);
+  assert.ok(!('client_secret' in meta));
+  const missing=await f.request('/mcp');assert.equal(missing.status,401);
+  assert.match(missing.headers.get('www-authenticate'),/resource_metadata="https:\/\/novels.example.test\/novel\/.well-known\/oauth-protected-resource"/);
+  assert.match(missing.headers.get('www-authenticate'),/scope="novels:read"/);
+  assert.ok((await missing.json())._meta['mcp/www_authenticate']);
+  const call=token=>f.request('/mcp',{method:'POST',data:{jsonrpc:'2.0',id:1,method:'tools/list'},headers:{Authorization:'Bearer '+token,Accept:'application/json, text/event-stream'}});
+  const valid=await call(await f.sign({},{audience:f.auth.mcpAudience}));assert.equal(valid.status,200);
+  for(const tool of (await valid.json()).result.tools){assert.equal(tool.annotations.readOnlyHint,true);assert.deepEqual(tool.securitySchemes,[{type:'oauth2',scopes:['novels:read']}]);}
+  for(const token of [await f.sign({}),await f.sign({scope:'openid'},{audience:f.auth.mcpAudience}),await f.sign({roles:[]},{audience:f.auth.mcpAudience}),await f.sign({},{audience:f.auth.mcpAudience,expiry:'-1h'})])assert.equal((await call(token)).status,401);
+ }finally{await f.close();}
+});
