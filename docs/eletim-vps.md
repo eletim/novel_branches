@@ -247,3 +247,13 @@ python3 scripts/public-story-managers.py grant --all-existing --username koji
 追加・解除は内部Docker CLIで行う。Keycloak管理APIで同じrealmの正確なusernameを一意に取得し、Keycloakのuser ID（OIDC sub）とアプリに設定されたissuerの組でoidc_identitiesを照合する。表示名/メールでは判定せず、Keycloakやアプリのユーザーを作成・統合しない。付与は有効なnovel-memberに限定する。対応が未作成なら本人の初回ログイン状態を確認し、誤ったユーザーへ代替割当しない。既存のパスワード・プロフィール・ロール・同意は変更しない。
 
 listは内部ユーザーID・username・表示名・creatorを表示する（OIDC利用者の内部usernameは不透明な識別子）。audit/grant/revokeはKeycloak username/issuer/sub/内部userIdを出すので本人対応を確認できる。auditのtotalとmanagedで全件を確認し、一括付与のaddedは新規追加数。同じ付与の再実行はadded=0となる。最初の制作者をrevokeすると失敗し、その権限は残る。一括付与を定期実行・起動処理へ登録しない。今後の新作へkojiを自動追加しない。
+
+公開結果: kojiのKeycloak username/subと設定issuerを既存OIDC identityへ照合し、内部user_id=3と確認した。公開ブラウザ検証後の全53作品（作業開始時37作品＋今回検証用16作品）へ手動で一括付与。初回total=53/managed=53/added=53、再実行added=0、auditでtotal=managed=53。全作品のWeb向けcan_manageと最初の制作者の割当保持を内部CLIでも確認し、実kojiの内部IDでも他人の各話のeditは403になることを確認した（本文を書き込まない拒否テスト）。既存の元データは検証/付与後も全行比較で一致した。
+
+自動テスト35件成功。公開実ChromiumのPC/375pxで、追加管理者の4項目編集、元作者の表示保持、追加の再実行、別作品/他人の各話への拒否、競合・通信失敗の入力/下書き保持、フォームを開いたまま解除した際の403と再読込後の編集操作非表示、元作者の継続管理を確認した。従来の作品情報・長文メモ・ホーム条件/検索/ページ送り・Main/分岐/前後移動・投稿/編集/グッドも成功。MCPは既存4ツールと設定メモ/非表示作品/読書順を維持する。
+
+koji本人のパスワード・プロフィール・ロール・同意や認証セッションを変更せず、本人のブラウザログインは代行していない。その範囲の本人操作確認は未実施で、本人IDに対するサーバー権限確認と専用管理者アカウントの実ブラウザで検証した。実機スマートフォン、ローカルDocker全構成、ChatGPT本体の再接続も未実施。
+
+公開OAuth/MCPのinitialize/tools/list/tools/call、既存4ツール、設定メモ/編集後本文/作者/入れ子経路、非表示作品、未認証/権限不足/不正PKCE・resourceの拒否、refreshと実時間期限切れ401→更新後の復帰が成功。ログに秘密値・認可queryの検出なし。
+
+最終両DBバックアップ: `/home/ubuntu/novel-backups/20261101T070300Z`（1cac5f5、最終文書追記前）。story_managersと全53作品へのkoji付与、既存作者・メモ・本文・ユーザー、Keycloakと秘密値を同時点で保存した。検証用3名は無効化・ログアウト・専用MCP offline grant取消済み。今回の専用16作品（主検証1、権限分離1、ページ送り14）はデフォルト非表示で記録として保持する。既存37作品の内容・作者・表示設定は変更していない。復元はこれまで同様、対応コードと同時点の両DBを組にして未使用volumeへ行い、旧コードだけをv6 DBへ戻して運用しない。
