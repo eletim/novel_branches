@@ -94,6 +94,7 @@ export class OidcAuth {
     try {
       await this.config();
       const {payload} = await jwtVerify(authorization.slice(7),this.jwks,{issuer:this.settings.issuer,audience:this.settings.mcpAudience,algorithms:['RS256'],requiredClaims:['sub','exp','iat'],clockTolerance:5});
+      // OIDC/refresh scopes are allowed additions, never substitutes for read permission.
       if (payload.typ !== 'Bearer' || !Array.isArray(payload.roles) || !payload.roles.includes(this.settings.memberRole) || typeof payload.scope !== 'string' || !payload.scope.split(' ').includes('novels:read')) throw Error('Missing access');
       return payload;
     } catch {throw new AppError('MCPの認証または閲覧権限を確認できません。',401);}

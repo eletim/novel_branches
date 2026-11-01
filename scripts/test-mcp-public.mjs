@@ -14,7 +14,7 @@ async function token(body){
  return {status:r.status,data};
 }
 let metadata;
-async function grant(name='member',{scope='openid novels:read',target=resource,badVerifier=false}={}){
+async function grant(name='member',{scope='openid offline_access novels:read',target=resource,badVerifier=false}={}){
  const context=await browser.newContext(),p=await context.newPage();
  const verifier=randomBytes(32).toString('base64url'),state=randomBytes(24).toString('hex');
  let done;const captured=new Promise(resolve=>{done=resolve;});
@@ -52,10 +52,13 @@ try {
  const protectedMetadata=await (await fetch(metadataURL)).json();assert.equal(protectedMetadata.resource,resource);assert.deepEqual(protectedMetadata.scopes_supported,['novels:read']);
  const issuer=protectedMetadata.authorization_servers[0];
  metadata=await (await fetch(origin+'/.well-known/oauth-authorization-server'+new URL(issuer).pathname)).json();
- assert.equal(metadata.issuer,issuer);assert.ok(metadata.code_challenge_methods_supported.includes('S256'));assert.equal(metadata.authorization_response_iss_parameter_supported,true);assert.ok(!metadata.registration_endpoint);
+ assert.equal(metadata.issuer,issuer);assert.ok(metadata.code_challenge_methods_supported.includes('S256'));assert.equal(metadata.authorization_response_iss_parameter_supported,true);assert.ok(!metadata.registration_endpoint);assert.ok(metadata.scopes_supported.includes('offline_access'));
  const standard=await (await fetch(origin+'/.well-known/oauth-protected-resource/novel/mcp')).json();assert.equal(standard.resource,resource);
  console.log('PASS public MCP: challenge, RFC discovery and /novel/ metadata');
  stage='authorization code + PKCE';const login=await grant();assert.equal(login.status,200);assert.ok(login.data.refresh_token);
+ const offline=JSON.parse(Buffer.from(login.data.refresh_token.split('.')[1],'base64url'));assert.equal(offline.typ,'Offline');
+ const identityOnly=await grant('member',{scope:'openid offline_access'});assert.equal(identityOnly.status,200);assert.equal((await rpc(identityOnly.data.access_token,'tools/list')).status,200);
+ console.log('PASS ChatGPT scopes: explicit three scopes and identity-only request both grant read; offline refresh token issued');
  const claims=JSON.parse(Buffer.from(login.data.access_token.split('.')[1],'base64url'));assert.ok([claims.aud].flat().includes(resource));assert.ok(claims.roles.includes('novel-member'));assert.ok(claims.scope.split(' ').includes('novels:read'));
  stage='MCP tools';assert.equal((await rpc(login.data.access_token,'initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'public-oauth-verifier',version:'1'}})).status,200);
  const catalog=await rpc(login.data.access_token,'tools/list');assert.equal(catalog.status,200);assert.deepEqual(catalog.data.result.tools.map(t=>t.name),['list_stories','get_story','get_chapter','get_branch_path']);
@@ -70,11 +73,11 @@ try {
  stage='refresh';const refreshed=await token({grant_type:'refresh_token',refresh_token:login.data.refresh_token,resource});assert.equal(refreshed.status,200,refreshed.data.error);assert.equal((await rpc(refreshed.data.access_token,'tools/list')).status,200);
  console.log('PASS public MCP: refresh token with canonical resource');
  stage='negative authorization';assert.equal((await rpc(null,'tools/list')).status,401);assert.equal((await rpc('not-a-token','tools/list')).status,401);
- for(const [name,options] of [['outsider',{}],['member',{scope:'openid'}]]){stage='negative '+name+' '+options.scope;const denied=await grant(name,options);assert.equal(denied.status,200);assert.equal((await rpc(denied.data.access_token,'tools/call',{name:'get_chapter',arguments:{chapterId:chapter.id}})).status,401);}
+ for(const [name,options] of [['outsider',{}]]){stage='negative '+name+' '+options.scope;const denied=await grant(name,options);assert.equal(denied.status,200);assert.equal((await rpc(denied.data.access_token,'tools/call',{name:'get_chapter',arguments:{chapterId:chapter.id}})).status,401);}
  stage='code replay';const replay=await grant();assert.equal(replay.status,200);assert.equal((await token(replay.body)).status,400);
  stage='invalid verifier';assert.equal((await grant('member',{badVerifier:true})).status,400);
  stage='invalid resource';const wrong=await grant('member',{target:'https://invalid.example/mcp'});assert.equal(wrong.status,400);assert.equal(wrong.data.error,'invalid_target');
- console.log('PASS public MCP: anonymous, bad token, missing role/scope, invalid PKCE and invalid resource rejected');
+ console.log('PASS public MCP: anonymous, bad token, missing role, invalid PKCE and invalid resource rejected; missing-scope rejection covered by signed-token unit tests');
  stage='actual access-token expiry';const end=claims.exp*1000+6500;
  while(Date.now()<end){console.log('Waiting for actual MCP access-token expiry; seconds:',Math.ceil((end-Date.now())/1000));await new Promise(resolve=>setTimeout(resolve,Math.min(30000,end-Date.now())));}
  assert.equal((await rpc(login.data.access_token,'tools/call',{name:'get_chapter',arguments:{chapterId:chapter.id}})).status,401);

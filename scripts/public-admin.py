@@ -25,12 +25,20 @@ if(c.configureMcp){
  if(!server)throw Error('MCP resource client not found');
  await request(realm+'/clients/'+server.id,'PUT',{attributes:{...server.attributes,resource_url:resource}},token);
  const [existing]=await request(realm+'/clients?clientId=novel-chatgpt','GET',null,token);
- const client={clientId:'novel-chatgpt',name:'Novel Branches — ChatGPT read only',enabled:true,protocol:'openid-connect',publicClient:false,clientAuthenticatorType:'client-secret',standardFlowEnabled:true,directAccessGrantsEnabled:false,implicitFlowEnabled:false,serviceAccountsEnabled:false,fullScopeAllowed:false,consentRequired:true,redirectUris:[c.callback],webOrigins:[],attributes:{'pkce.code.challenge.method':'S256','use.refresh.tokens':'true','oauth2.device.authorization.grant.enabled':'false'},defaultClientScopes:['basic'],optionalClientScopes:['profile','novels:read'],protocolMappers:server.protocolMappers.map(({id,...mapper})=>mapper)};
+ const client={clientId:'novel-chatgpt',name:'Novel Branches — ChatGPT read only',enabled:true,protocol:'openid-connect',publicClient:false,clientAuthenticatorType:'client-secret',standardFlowEnabled:true,directAccessGrantsEnabled:false,implicitFlowEnabled:false,serviceAccountsEnabled:false,fullScopeAllowed:false,consentRequired:true,redirectUris:[c.callback],webOrigins:[],attributes:{'pkce.code.challenge.method':'S256','use.refresh.tokens':'true','oauth2.device.authorization.grant.enabled':'false'},defaultClientScopes:['basic','novels:read'],optionalClientScopes:['profile','offline_access'],protocolMappers:server.protocolMappers.map(({id,...mapper})=>mapper)};
  if(existing){const saved=await request(realm+'/clients/'+existing.id+'/client-secret','GET',null,token);if(saved.value!==c.mcpSecret)throw Error('Stored ChatGPT client secret differs; restore the existing credential instead of rotating it');await request(realm+'/clients/'+existing.id,'PUT',{...client,attributes:{...existing.attributes,...client.attributes}},token);}
  else {await request(realm+'/clients','POST',{...client,secret:c.mcpSecret},token);}
  const [configured]=await request(realm+'/clients?clientId=novel-chatgpt','GET',null,token);
+ const scopes=await request(realm+'/client-scopes','GET',null,token);
+ const readScope=scopes.find(s=>s.name==='novels:read'),offlineScope=scopes.find(s=>s.name==='offline_access');
+ if(!readScope||!offlineScope)throw Error('Required read/offline client scope missing');
+ // Update existing scope links explicitly; client PUT alone does not reliably change them.
+ await request(realm+'/clients/'+configured.id+'/optional-client-scopes/'+readScope.id,'DELETE',null,token);
+ await request(realm+'/clients/'+configured.id+'/default-client-scopes/'+readScope.id,'PUT',null,token);
+ await request(realm+'/clients/'+configured.id+'/optional-client-scopes/'+offlineScope.id,'PUT',null,token);
  const role=await request(realm+'/roles/novel-member','GET',null,token);
- await request(realm+'/clients/'+configured.id+'/scope-mappings/realm','POST',[role],token);
+ const offlineRole=await request(realm+'/roles/offline_access','GET',null,token);
+ await request(realm+'/clients/'+configured.id+'/scope-mappings/realm','POST',[role,offlineRole],token);
 }
 if(c.configure){
  const [client]=await request(realm+'/clients?clientId=novel-web','GET',null,token);

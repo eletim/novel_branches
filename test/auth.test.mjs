@@ -197,3 +197,14 @@ test('MCP discoveryはサブパス・issuer・scopeを公開し、本文はOAuth
   for(const token of [await f.sign({}),await f.sign({scope:'openid'},{audience:f.auth.mcpAudience}),await f.sign({roles:[]},{audience:f.auth.mcpAudience}),await f.sign({},{audience:f.auth.mcpAudience,expiry:'-1h'})])assert.equal((await call(token)).status,401);
  }finally{await f.close();}
 });
+
+
+test('MCPはopenid/offline_accessの追加とscope順序を許可し、read scopeの欠落は拒否する',async()=>{
+ const f=await fixture({basePath:'/novel',internalRouting:true});try{
+  const call=async scope=>f.request('/mcp',{method:'POST',data:{jsonrpc:'2.0',id:1,method:'tools/list'},headers:{Authorization:'Bearer '+await f.sign({scope}),Accept:'application/json, text/event-stream'}});
+  for(const scopes of ['openid offline_access novels:read','novels:read offline_access openid','openid  novels:read  offline_access'])assert.equal((await call(scopes)).status,200);
+  for(const scopes of ['openid offline_access','openid offline_access novels:reader','offline_access'])assert.equal((await call(scopes)).status,401);
+  const metadata=await (await f.request('/../.well-known/oauth-authorization-server/id/realms/novel-branches')).json();
+  assert.ok(metadata.scopes_supported.includes('openid'));assert.ok(metadata.scopes_supported.includes('offline_access'));assert.ok(metadata.scopes_supported.includes('novels:read'));
+ }finally{await f.close();}
+});

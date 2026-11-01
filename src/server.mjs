@@ -43,7 +43,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
       // RFC 8414 places the well-known segment before an issuer path.
       if (identity && url.pathname==='/.well-known/oauth-authorization-server'+new URL(auth.issuer).pathname && req.method==='GET') {
         const metadata=(await identity.config()).serverMetadata();
-        return send(200,{issuer:metadata.issuer,authorization_endpoint:metadata.authorization_endpoint,token_endpoint:metadata.token_endpoint,jwks_uri:metadata.jwks_uri,response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],token_endpoint_auth_methods_supported:['client_secret_basic','client_secret_post'],code_challenge_methods_supported:['S256'],scopes_supported:['openid','profile','novels:read'],authorization_response_iss_parameter_supported:metadata.authorization_response_iss_parameter_supported===true});
+        return send(200,{issuer:metadata.issuer,authorization_endpoint:metadata.authorization_endpoint,token_endpoint:metadata.token_endpoint,jwks_uri:metadata.jwks_uri,response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],token_endpoint_auth_methods_supported:['client_secret_basic','client_secret_post'],code_challenge_methods_supported:['S256'],scopes_supported:['openid','profile','offline_access','novels:read'],authorization_response_iss_parameter_supported:metadata.authorization_response_iss_parameter_supported===true});
       }
       // Health is internal and remains independent of the browser mount path.
       if (url.pathname === '/health') return send(200,{status:'ok'});
