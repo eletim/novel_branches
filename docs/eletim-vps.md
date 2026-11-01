@@ -127,3 +127,5 @@ Caddyは `/novel/*` に加え、PRMのRFC 9728標準パスとissuerのRFC 8414�
 ChatGPT本体の接続登録はユーザー操作が必要。登録画面の正確なcallbackが設定済みstable URLと異なる場合のみ `python3 scripts/public-admin.py --configure-mcp --chatgpt-callback '画面のURL'` を実行し、そのURIだけを許可する。秘密値は画面入力に使い、チャットには貼らない。
 
 変更後の最終バックアップ: `/home/ubuntu/novel-backups/20261101T003013Z`（日本時間2026-11-01 09:30:13）。新しいChatGPTクライアントsecret・canonical audience設定・Keycloakの専用クライアントを両DBと組にして保存し、SHA256を確認した。外部MCP OAuthの実時間約5分の期限切れ401と、refreshによる本文閲覧権限の復帰を確認。検証用3アカウントは無効化・セッション失効し、Web回帰確認で追加した検証作品は記録として保持した。ChatGPT本体の接続は未確認で、登録・参加者の本人ログイン・会話からの4ツール呼び出しが残る。
+
+ログ対策: Nginxの通常アクセスログはqueryを省いたpath/statusのみ。大きなKeycloak CSSのbuffer警告がRefererの認証stateを記録するケースを検出したため、Nginxのエラーログはcritical以上に制限し、診断にはpath/statusログを使用する。CaddyのruntimeログからHTTP requestオブジェクト全体を除き、接続障害時にもcallback query・Cookie・Authorizationを記録しない。パスワード・client secret・アクセストークンのログ出力は検出されていない。

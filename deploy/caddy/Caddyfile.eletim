@@ -1,3 +1,16 @@
+{
+    # Runtime errors can otherwise include OAuth callback queries and Referer.
+    # Nginx retains sanitized path/status access logs for diagnosis.
+    log default {
+        format filter {
+            wrap json
+            fields {
+                request delete
+            }
+        }
+    }
+}
+
 eletim.jp {
     redir / /novel/ 302
     redir /novel /novel/ 308
