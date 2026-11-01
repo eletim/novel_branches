@@ -63,7 +63,10 @@ export class Store {
       if(!storyColumns.has('revision'))this.db.exec('ALTER TABLE stories ADD COLUMN revision INTEGER NOT NULL DEFAULT 1');
       if(!storyColumns.has('updated_at'))this.db.exec('ALTER TABLE stories ADD COLUMN updated_at TEXT');
       this.db.exec(`UPDATE stories SET updated_at=created_at WHERE updated_at IS NULL;
-        PRAGMA user_version=5;`);
+        CREATE TABLE IF NOT EXISTS story_managers(story_id INTEGER NOT NULL REFERENCES stories(id),user_id INTEGER NOT NULL REFERENCES users(id),PRIMARY KEY(story_id,user_id));
+        CREATE INDEX IF NOT EXISTS story_managers_user ON story_managers(user_id,story_id);
+        INSERT OR IGNORE INTO story_managers(story_id,user_id) SELECT id,author_id FROM stories;
+        PRAGMA user_version=6;`);
     });
   }
   close() { this.db.close(); }
@@ -145,18 +148,49 @@ export class Store {
       FROM stories s JOIN users u ON u.id=s.author_id WHERE (? OR s.hidden_from_home=0) AND (instr(s.title,?)>0 OR instr(s.summary,?)>0)
       ORDER BY ${sort === 'popular' ? 'likes DESC,' : ''} s.id DESC LIMIT ? OFFSET ?`).all(includeHidden ? 1 : 0, query, query, limit, offset);
   }
-  story(id) {
+  story(id, viewer=0) {
     const s = this.db.prepare('SELECT s.*,u.display_name author FROM stories s JOIN users u ON u.id=s.author_id WHERE s.id=?').get(id);
     if (!s) throw new AppError('作品が見つかりません。',404);
     s.branches = this.db.prepare(`SELECT b.*,u.display_name author,(SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id WHERE c.branch_id=b.id) likes FROM branches b JOIN users u ON u.id=b.author_id WHERE b.story_id=? ORDER BY b.id`).all(id);
     s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,c.created_at,c.updated_at,c.revision,c.author_id,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
+    if(viewer)s.can_manage=this.canManageStory(viewer,id);
     return s;
+  }
+  canManageStory(userId,storyId) {
+    return !!this.db.prepare('SELECT 1 FROM stories s WHERE s.id=? AND (s.author_id=? OR EXISTS(SELECT 1 FROM story_managers m WHERE m.story_id=s.id AND m.user_id=?))').get(storyId,userId,userId);
+  }
+  storyManagers(storyId) {
+    const story=this.db.prepare('SELECT author_id FROM stories WHERE id=?').get(storyId);
+    if(!story)throw new AppError('作品が見つかりません。',404);
+    return this.db.prepare('SELECT u.id,u.username,u.display_name,(u.id=?) creator FROM users u WHERE u.id=? OR EXISTS(SELECT 1 FROM story_managers m WHERE m.story_id=? AND m.user_id=u.id) ORDER BY u.id').all(story.author_id,story.author_id,storyId);
+  }
+  assignStoryManager(storyId,userId,grant=true) {
+    return this.transaction(()=>{
+      const story=this.db.prepare('SELECT author_id FROM stories WHERE id=?').get(storyId);
+      if(!story)throw new AppError('作品が見つかりません。',404);
+      if(!this.user(userId))throw new AppError('ユーザーが見つかりません。',404);
+      if(!grant&&story.author_id===userId)throw new AppError('最初の制作者の管理権限は解除できません。',403);
+      if(grant)this.db.prepare('INSERT OR IGNORE INTO story_managers(story_id,user_id) VALUES(?,?)').run(storyId,userId);
+      else this.db.prepare('DELETE FROM story_managers WHERE story_id=? AND user_id=?').run(storyId,userId);
+      return this.storyManagers(storyId);
+    });
+  }
+  assignAllStoryManagers(userId) {
+    return this.transaction(()=>{
+      if(!this.user(userId))throw new AppError('ユーザーが見つかりません。',404);
+      const inserted=this.db.prepare('INSERT OR IGNORE INTO story_managers(story_id,user_id) SELECT id,? FROM stories').run(userId);
+      return {...this.storyManagementAudit(userId),added:Number(inserted.changes)};
+    });
+  }
+  storyManagementAudit(userId) {
+    if(!this.user(userId))throw new AppError('ユーザーが見つかりません。',404);
+    return this.db.prepare('SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN s.author_id=? OR EXISTS(SELECT 1 FROM story_managers m WHERE m.story_id=s.id AND m.user_id=?) THEN 1 ELSE 0 END),0) managed FROM stories s').get(userId,userId);
   }
   setStoryVisibility(userId,id,input) {return this.updateStory(userId,id,input);}
   updateStory(userId,id,input) {
     return this.transaction(()=>{
       const story=this.story(id);
-      if(story.author_id!==userId)throw new AppError('作品情報を編集できるのは最初の制作者だけです。',403);
+      if(!this.canManageStory(userId,id))throw new AppError('作品情報の管理権限がありません。',403);
       const allowed=['title','summary','hiddenFromHome','settingNotes','expectedRevision'];
       if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!allowed.includes(k))||Object.keys(input).length<2)throw new AppError('作品情報の指定が不正です。');
       if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<1)throw new AppError('編集元の版を指定してください。');
@@ -169,7 +203,7 @@ export class Store {
       const hidden='hiddenFromHome' in input?(input.hiddenFromHome?1:0):story.hidden_from_home;
       const updatedAt=new Date(Math.max(Date.now(),Date.parse(story.updated_at||story.created_at)+1)).toISOString();
       this.db.prepare('UPDATE stories SET title=?,summary=?,hidden_from_home=?,setting_notes=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?').run(title,summary,hidden,notes,updatedAt,id,input.expectedRevision);
-      return this.story(id);
+      return this.story(id,userId);
     });
   }
   chapter(id, viewer = 0) {
@@ -197,6 +231,7 @@ export class Store {
       const b = this.db.prepare('INSERT INTO branches(story_id,title,author_id) VALUES(?,?,?)').run(storyId, '本編',userId);
       const branchId = Number(b.lastInsertRowid);
       this.db.prepare('UPDATE stories SET main_branch_id=?,updated_at=created_at WHERE id=?').run(branchId,storyId);
+      this.db.prepare('INSERT INTO story_managers(story_id,user_id) VALUES(?,?)').run(storyId,userId);
       const chapterId = this.insertChapter(branchId,null,chapterTitle,body,userId);
       return { storyId,branchId,chapterId };
     });

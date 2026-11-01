@@ -64,3 +64,7 @@ stories.hidden_from_homeは0/1、既存・新規とも0。PATCH /api/stories/:id
 ## 作品情報（schema v5）
 
 storiesにsetting_notes（TEXT、空文字）、revision（1から）、updated_at（既存はcreated_at）を追加する。title/summary/hidden_from_home/setting_notesを最初の作者だけがCAS更新できる。メモは100000文字までの自由記述で、HTMLとして解釈せず改行・空白を保持する。更新はstoriesの該当列だけで、branch/chapter/like/作者やMainは変更しない。目次から作品情報へbranch付きで移動し、閲覧と編集フォームを分ける。下書きはユーザーと作品ID別でrevisionも保持する。概要一覧はメモを除外し、get_storyで取得する。
+
+## 作品管理者（schema v6）
+
+story_managersは作品とアプリ内ユーザーの多対多関係。制作者は移行/新作で登録し、解除不可かつstories.author_idによる暗黙権限も残す。追加管理者は作品情報のCAS編集だけを許可し、各話の編集権限へは波及させない。Webだけがログイン中のcan_manageを受け取り、MCPは管理判定や権限変更ツールを公開しない。内部CLIはKeycloakの正確なusername→sub→issuer/subの既存OIDC対応で解決し、表示名や新規ユーザーの自動作成には頼らない。一括付与は実行時点のINSERT SELECTのみで、今後の作品への継承はない。

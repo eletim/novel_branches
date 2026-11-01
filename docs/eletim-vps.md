@@ -224,3 +224,26 @@ yuiは新規作成済み。表示名yui、有効、novel-member、UPDATE_PASSWOR
 実時間のMCPアクセストークン期限後の拒否とrefreshによる復帰も成功した。今回は独立したOAuthブラウザクライアントで検証しており、ChatGPT本体の再接続操作、実スマートフォン端末、ローカルDocker全構成は未実施。yui本人の初回ログインとパスワード変更も代行していない。
 
 最終両DBバックアップ: `/home/ubuntu/novel-backups/20261101T045842Z`（2232980、最終結果の文書追記前）。v5の設定メモ・作品revision、yuiのKeycloakアカウント・初回変更必須状態、既存ユーザー・秘密値・対応コードを組で保存した。検証用3名は無効化/ログアウト/専用クライアントoffline grant取消済み。今回の検証作品15件はデフォルト非表示で保持し、既存作品や各話を削除していない。yuiは検証アカウントに含めず、有効のまま維持する。
+
+## 作品ごとの複数管理者（schema v6、2026-11-01）
+
+変更前バックアップ: `/home/ubuntu/novel-backups/20261101T064953Z`（ffeafbf）。既存37作品を含むSQLiteコピーでv6を試し、元の全行・全列・Main・表示設定・メモ・作者・本文・分岐・票・OIDC対応の保持とFK/integrityを確認した。story_managers(story_id,user_id)の複合主キーを追加し、全作品の最初の制作者を登録する。新作も作成トランザクションで制作者を管理者にする。権限を追加してもstories.author_idは変えない。最初の制作者の権限は解除不可で、元の作者判定も残す。
+
+作品情報の4項目（タイトル/あらすじ/通常・非表示/設定メモ）は作品管理者が編集できる。WebのGET /api/stories/:idはログイン中ユーザーのcan_manageを返し、作品情報の編集ボタンはこの値で出す。PATCHは毎回DBの権限を確認し、解除済みの古いフォームも403にする。CAS/下書き/保存失敗時保持は維持する。各話の編集は引き続き各話author_idのみで、作品管理権限は参照しない。管理者設定用HTTP/MCPエンドポイントやWeb UIは設けない。閲覧専用MCPは従来4ツールのみ。
+
+### 管理者の追加・解除・確認
+
+VPSの `/home/ubuntu/novel_branches` で実行する。作品IDは作品URLの `#story/42` / `#info/42` などの数字。--usernameは表示名ではなく**Keycloakの正確なログインID**。
+
+```bash
+python3 scripts/public-story-managers.py grant --story 42 --username koji
+python3 scripts/public-story-managers.py revoke --story 42 --username koji
+python3 scripts/public-story-managers.py list --story 42
+python3 scripts/public-story-managers.py audit --username koji
+# 明示的に、実行時点に存在する全作品（非表示を含む）だけへ一括付与
+python3 scripts/public-story-managers.py grant --all-existing --username koji
+```
+
+追加・解除は内部Docker CLIで行う。Keycloak管理APIで同じrealmの正確なusernameを一意に取得し、Keycloakのuser ID（OIDC sub）とアプリに設定されたissuerの組でoidc_identitiesを照合する。表示名/メールでは判定せず、Keycloakやアプリのユーザーを作成・統合しない。付与は有効なnovel-memberに限定する。対応が未作成なら本人の初回ログイン状態を確認し、誤ったユーザーへ代替割当しない。既存のパスワード・プロフィール・ロール・同意は変更しない。
+
+listは内部ユーザーID・username・表示名・creatorを表示する（OIDC利用者の内部usernameは不透明な識別子）。audit/grant/revokeはKeycloak username/issuer/sub/内部userIdを出すので本人対応を確認できる。auditのtotalとmanagedで全件を確認し、一括付与のaddedは新規追加数。同じ付与の再実行はadded=0となる。最初の制作者をrevokeすると失敗し、その権限は残る。一括付与を定期実行・起動処理へ登録しない。今後の新作へkojiを自動追加しない。

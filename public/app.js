@@ -59,7 +59,7 @@ function bindBranchSelect(story,chapterIndex=null) {
 async function storyInfo(id,generation,params) {
   const story=await api('/stories/'+id),{branch}=selectReading(story,params.get('branch'));
   if(generation!==viewGeneration)return;
-  app.innerHTML=`<section class="story-info"><div class="info-top"><a class="back info-to-toc" href="#story/${id}?branch=${branch.id}">← 目次</a>${story.author_id===user.id?'<button class="quiet small" id="edit-story-info">編集</button>':''}</div><h1>${esc(story.title)}</h1><p class="meta">最初の制作者：${esc(story.author)}</p><h2>あらすじ</h2><p class="info-text">${esc(story.summary)}</p><p class="meta">ホーム一覧：${story.hidden_from_home?'デフォルト非表示':'通常表示'}</p><h2>設定メモ</h2><div class="setting-notes info-text">${esc(story.setting_notes)||'<span class="meta">未記入</span>'}</div></section>`;
+  app.innerHTML=`<section class="story-info"><div class="info-top"><a class="back info-to-toc" href="#story/${id}?branch=${branch.id}">← 目次</a>${story.can_manage?'<button class="quiet small" id="edit-story-info">編集</button>':''}</div><h1>${esc(story.title)}</h1><p class="meta">最初の制作者：${esc(story.author)}</p><h2>あらすじ</h2><p class="info-text">${esc(story.summary)}</p><p class="meta">ホーム一覧：${story.hidden_from_home?'デフォルト非表示':'通常表示'}</p><h2>設定メモ</h2><div class="setting-notes info-text">${esc(story.setting_notes)||'<span class="meta">未記入</span>'}</div></section>`;
   if($('#edit-story-info'))$('#edit-story-info').onclick=()=>storyInfoEditor(story,branch.id);
 }
 function storyInfoEditor(story,branchId) {

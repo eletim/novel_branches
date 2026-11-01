@@ -130,7 +130,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
           const [,kind,rawId,action] = match, id = Number(rawId);
           if (!Number.isSafeInteger(id)) throw new AppError('IDが不正です。');
           if (req.method === 'PATCH' && !action && kind === 'stories') return send(200,store.updateStory(user.id,id,await body(req)));
-          if (req.method === 'GET' && !action && kind === 'stories') return send(200,store.story(id));
+          if (req.method === 'GET' && !action && kind === 'stories') return send(200,store.story(id,user.id));
           if (req.method === 'PATCH' && !action && kind === 'chapters') return send(200,store.edit(user.id,id,await body(req)));
           if (req.method === 'POST' && kind === 'chapters' && action === 'alternate') return send(201,store.alternate(user.id,id,await body(req)));
           if (req.method === 'GET' && !action && kind === 'chapters') return send(200,store.chapter(id,user.id));
