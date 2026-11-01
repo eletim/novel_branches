@@ -60,3 +60,7 @@ PATCH /api/chapters/:idはサーバーでauthor_idを照合する。expectedRevi
 stories.main_branch_idは作品の初期読書経路を示す。移行は最初の「本編」を優先し、なければ最古のbranchを使う。既存branch名・ID・話の親子関係・headは変更しない。URL内branchが指定されればその経路を使用し、末尾から別branchへ自動延長しない。別案は同じparent_idの話から現在の話を除いて数える。全branchを選べる小さな読書経路selectにより、現在の末尾の先から作られたbranchにも明示的に切り替えられる。
 
 stories.hidden_from_homeは0/1、既存・新規とも0。PATCH /api/stories/:idのhiddenFromHome真偽値で変更し、サーバーで最初の制作者を検証する。Web一覧はview=allの場合だけ含め、検索条件・人気順・LIMIT/OFFSETより前に絞る。URLからの作品/本文/グッドや権限は変えない。MCPのlist_storiesはincludeHidden=trueを明示し従来の取得範囲を維持する。
+
+## 作品情報（schema v5）
+
+storiesにsetting_notes（TEXT、空文字）、revision（1から）、updated_at（既存はcreated_at）を追加する。title/summary/hidden_from_home/setting_notesを最初の作者だけがCAS更新できる。メモは100000文字までの自由記述で、HTMLとして解釈せず改行・空白を保持する。更新はstoriesの該当列だけで、branch/chapter/like/作者やMainは変更しない。目次から作品情報へbranch付きで移動し、閲覧と編集フォームを分ける。下書きはユーザーと作品ID別でrevisionも保持する。概要一覧はメモを除外し、get_storyで取得する。

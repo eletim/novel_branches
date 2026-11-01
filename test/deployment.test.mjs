@@ -16,7 +16,7 @@ test('v0.1のDBを開くと、既存ユーザー・セッション・作品を�
   try{
     assert.equal(store.user(1).display_name,'旧ユーザー');assert.equal(store.login('alice','existing-password').user.id,1);
     const root=store.createStory(1,{title:'移行後も書ける',chapterTitle:'一話',body:'本文'});assert.equal(store.story(root.storyId).author_id,1);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,4);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,5);
     const oidc=store.oidcUser('https://issuer.example','sub-1','Alice');assert.notEqual(oidc.id,1);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

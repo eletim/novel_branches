@@ -12,9 +12,9 @@ test('作品表示設定は作者のみ、検索・票順・ページ送りと�
  const store=new Store(':memory:'),a=store.addUser('alice','Alice','alice-password'),b=store.addUser('bob','Bob','bob-password');
  const stories=Array.from({length:15},(_,i)=>store.createStory(a.id,{title:'Find '+i,summary:i%2?'needle':'other',chapterTitle:'first',body:'body'}));
  const hidden=stories[12];store.like(b.id,hidden.chapterId,true);
- store.setStoryVisibility(a.id,hidden.storyId,{hiddenFromHome:true});
+ store.setStoryVisibility(a.id,hidden.storyId,{hiddenFromHome:true,expectedRevision:1});
  assert.throws(()=>store.setStoryVisibility(b.id,hidden.storyId,{hiddenFromHome:false}),e=>e.status===403);
- assert.throws(()=>store.setStoryVisibility(a.id,hidden.storyId,{hiddenFromHome:'true'}),e=>e.status===400);
+ assert.throws(()=>store.setStoryVisibility(a.id,hidden.storyId,{hiddenFromHome:'true',expectedRevision:2}),e=>e.status===400);
  assert.throws(()=>store.setStoryVisibility(a.id,hidden.storyId,{hiddenFromHome:false,author_id:b.id}),e=>e.status===400);
  assert.equal(store.story(stories[0].storyId).hidden_from_home,0);
  assert.equal(store.story(hidden.storyId).main_branch_id,hidden.branchId);
@@ -39,7 +39,7 @@ test('作品表示設定は作者のみ、検索・票順・ページ送りと�
   }
   assert.equal((await request('/stories/'+hidden.storyId,'GET',null,bob)).status,200);
   assert.equal((await request('/chapters/'+hidden.chapterId,'GET',null,bob)).status,200);
-  assert.equal((await request('/stories/'+hidden.storyId,'PATCH',{hiddenFromHome:false},alice)).status,200);
+  assert.equal((await request('/stories/'+hidden.storyId,'PATCH',{hiddenFromHome:false,expectedRevision:2},alice)).status,200);
   assert.equal((await(await request('/stories?limit=100','GET',null,bob)).json()).stories.length,15);
  }finally{await new Promise(r=>server.close(r));store.close();}
 });
@@ -49,9 +49,9 @@ test('v3からの追加移行は既存作品を通常表示とし、最初の本
  store.like(user.id,root.chapterId,true);
  // Reconstruct the v3 stories table while keeping all other actual tables/data.
  store.db.exec(`PRAGMA foreign_keys=OFF;CREATE TABLE stories_v3(id INTEGER PRIMARY KEY,title TEXT,summary TEXT,author_id INTEGER,created_at TEXT);INSERT INTO stories_v3 SELECT id,title,summary,author_id,created_at FROM stories;DROP TABLE stories;ALTER TABLE stories_v3 RENAME TO stories;PRAGMA user_version=3;PRAGMA foreign_keys=ON;`);store.close();
- try{store=new Store(path);const story=store.story(root.storyId);assert.equal(story.hidden_from_home,0);assert.equal(story.main_branch_id,root.branchId);assert.equal(store.chapter(root.chapterId).body,'preserved');assert.equal(store.chapter(root.chapterId).likes,1);assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,4);assert.deepEqual(store.db.prepare('PRAGMA foreign_key_check').all(),[]);
+ try{store=new Store(path);const story=store.story(root.storyId);assert.equal(story.hidden_from_home,0);assert.equal(story.main_branch_id,root.branchId);assert.equal(store.chapter(root.chapterId).body,'preserved');assert.equal(store.chapter(root.chapterId).likes,1);assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,5);assert.deepEqual(store.db.prepare('PRAGMA foreign_key_check').all(),[]);
   // Main is authoritative even if the response branches arrive in a different order.
   story.branches.reverse();assert.equal(selectReading(story).branch.id,root.branchId);assert.equal(selectReading(story).path.length,1);assert.equal(selectReading(story,fork.branchId).path.length,2);
-  store.setStoryVisibility(user.id,root.storyId,{hiddenFromHome:true});store.close();store=new Store(path);assert.equal(store.story(root.storyId).hidden_from_home,1);assert.equal(store.story(root.storyId).main_branch_id,root.branchId);
+  store.setStoryVisibility(user.id,root.storyId,{hiddenFromHome:true,expectedRevision:1});store.close();store=new Store(path);assert.equal(store.story(root.storyId).hidden_from_home,1);assert.equal(store.story(root.storyId).main_branch_id,root.branchId);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

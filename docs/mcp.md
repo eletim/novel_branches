@@ -157,3 +157,5 @@ ChatGPT側は同じ設定で**OAuth認証を再実行**し、新たなoffline/re
 get_storyのchapters、get_chapter、get_branch_pathは各話のauthor_id/author、updated_at、revisionと最新本文を返す。作品・branchの作成者と話の制作者は別。共有される話の編集はすべての経路で同じ内容になる。4つの閲覧ツールのみで、編集・投稿APIはMCPに公開しない。OAuth、novel-member、novels:readの必須検証は変更していない。
 
 ホーム一覧のデフォルト非表示はMCPの公開範囲を制限しない。list_storiesは通常どおり全作品を検索・ページ送りでき、get_story/get_chapter/get_branch_pathも変更なし。get_storyのmain_branch_idがMainのID、hidden_from_homeはホーム表示の設定値で、アクセス権の意味は持たない。
+
+get_storyのsetting_notesは作品の設定メモ（初期値空文字）、revision/updated_atは作品情報の版と更新日時です。各話のrevision/updated_atとは別です。MCPは従来の4つの閲覧ツールだけで、設定メモや作品情報の変更ツールはありません。list_storiesは長文メモを含めません。

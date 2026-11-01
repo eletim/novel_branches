@@ -195,3 +195,24 @@ v4からの取り消しもDB移行を伴うため、両DBとバックアップ�
 最終結果: 公開MCPの実時間期限切れ401とrefresh後の復帰も成功。専用3アカウントは無効化・ログアウトし、novel-chatgptのoffline grantを取り消した。移行後の両DB最終バックアップは `/home/ubuntu/novel-backups/20261101T042557Z`（d7a175f）。v4 DB・秘密値・Caddy設定・対応コードを組で保存する。kojiのプロフィール・パスワード・ロール・同意には変更を加えていない。
 
 今回は実ChromiumのPC/375pxと公開VPSで検証し、実スマートフォン端末・ローカルDocker全スタック・ChatGPT本体の再登録/会話操作は未実施。ChatGPT本体で以前に作品一覧取得できたことは利用者報告であり、今回のOAuth/MCP検証は独立したブラウザテストクライアントで行った。OAuth登録値やscopeは変更しておらず、ChatGPT側の再登録は不要。
+
+## 作品情報・設定メモと参加者作成（schema v5、2026-11-01）
+
+反映前バックアップ: `/home/ubuntu/novel-backups/20261101T044732Z`（7bfd20f）。SQLiteコピーで追加移行し、全既存列/行・Main・表示設定の保持、空メモ、作品revision=1、FK/integrityを確認した。storiesにsetting_notes（初期値空）、revision、updated_atを追加する。既存作品の本文・作者・親・票は変更しない。
+
+目次上部の「作品情報」から `#info/作品ID?branch=選択ID` へ移動する。参加者は作品タイトル・あらすじ・最初の制作者・表示設定・設定メモを閲覧でき、最初の制作者のみ「編集」からまとめて変更する。作品全体の表示設定は各話Editorから移した。話のEditorは話の編集/続話/別案/分岐に限定する。目次へ戻るリンクはbranchを維持する。
+
+PATCH /api/stories/:idはtitle/summary/hiddenFromHome/settingNotesの部分更新とexpectedRevisionを受け付ける。全設定を同じ作品revisionで競合検出し、古い更新409、他者403、未認証401。旧UIや旧APIクライアントのrevisionなし更新は400になり、最新版を再読込する必要がある。メモは100000文字まで、空文字と改行・前後の空白を保持し、表示はHTMLとして解釈しない。フォームと下書きに元のrevisionを保持し、保存失敗や再読込でも入力を復元する。最新情報からやり直す操作は下書き破棄の明示確認を伴う。
+
+MCP get_storyはsetting_notes/revision/updated_atを返す。MCPに書き込みツールは追加していない。ホーム一覧API/MCP list_storiesの概要に長文メモは載せず、通常の目次・本文にも表示しない。
+
+### パスワードを表示せず参加者を作る
+
+```bash
+python3 scripts/public-create-participant.py --username yui --display-name yui \
+  --initial-password-file /home/ubuntu/.local/share/novel-onboarding/yui.initial-password
+```
+
+Keycloak内部APIでnovel-branchesの同名ユーザーを先に確認する。既存なら公開可能な状態だけを表示して終了し、パスワード・プロフィール・ロールや既存ファイルを変更しない。新規ならランダムな初回パスワードを0700ディレクトリ配下の0600ファイルへ排他的に保存し、enabled/novel-member/UPDATE_PASSWORDで作成する。秘密値は引数・標準出力・Gitへ載せない。ファイルやアカウント作成途中の失敗時は、状態を確認してから再試行する。本人の初回ログインを代行しない。
+
+管理者が自分の端末で `ssh -t ubuntu@eletim.jp 'cat /home/ubuntu/.local/share/novel-onboarding/yui.initial-password'` を実行すると初回パスワードを確認できる。録画・ログ保存のない端末で確認し、本人へ別の安全な経路で連絡する。初回URLは `https://eletim.jp/novel/auth/login`。yuiで入り、本人がパスワード変更と要求された必須プロフィール入力を行う。変更確認後、`ssh ubuntu@eletim.jp 'rm -- /home/ubuntu/.local/share/novel-onboarding/yui.initial-password'` で一時ファイルを削除する。初回パスワードはチャットへ貼らない。

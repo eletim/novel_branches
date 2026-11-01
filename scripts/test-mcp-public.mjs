@@ -76,6 +76,7 @@ try {
   const contributed=await call('get_chapter',{chapterId:proof.second});assert.equal(contributed.author,'Test other');assert.ok(contributed.updated_at);
   const editedStory=await call('get_story',{storyId:proof.story});assert.equal(editedStory.chapters.find(c=>c.id===proof.second).author,'Test other');
   if(proof.hiddenStory){assert.equal(editedStory.hidden_from_home,1);const hiddenList=await call('list_stories',{query:editedStory.title});assert.ok(hiddenList.stories.some(s=>s.id===proof.hiddenStory));console.log('PASS MCP hidden story: list_stories/get_story/get_chapter/get_branch_path retain access independently of home visibility');}
+  if(proof.settingNotes!==undefined){assert.equal(editedStory.setting_notes,proof.settingNotes);assert.ok(editedStory.revision>1);console.log('PASS MCP get_story: saved Japanese setting notes and metadata revision match browser');}
   const nestedBranch=editedStory.branches.find(b=>b.head_id===proof.nestedFourth);
   const editedPath=await call('get_branch_path',{branchId:nestedBranch.id});assert.deepEqual(editedPath.chapters.map(c=>c.id),[proof.first,proof.fork,proof.nested,proof.nestedFourth]);assert.equal(editedPath.chapters[0].updated_at,proof.updatedAt);assert.equal(editedPath.chapters[1].author,'Test member');
   console.log('PASS MCP episode regression: edited body/revision/update time, per-episode creators and nested reading order match browser');

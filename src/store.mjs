@@ -58,7 +58,12 @@ export class Store {
       if(!storyColumns.has('hidden_from_home'))this.db.exec('ALTER TABLE stories ADD COLUMN hidden_from_home INTEGER NOT NULL DEFAULT 0 CHECK(hidden_from_home IN (0,1))');
       if(!storyColumns.has('main_branch_id'))this.db.exec('ALTER TABLE stories ADD COLUMN main_branch_id INTEGER REFERENCES branches(id)');
       this.db.exec(`UPDATE stories SET main_branch_id=COALESCE((SELECT id FROM branches WHERE story_id=stories.id AND title='本編' ORDER BY id LIMIT 1),(SELECT id FROM branches WHERE story_id=stories.id ORDER BY id LIMIT 1)) WHERE main_branch_id IS NULL;
-        PRAGMA user_version=4;`);
+        `);
+      if(!storyColumns.has('setting_notes'))this.db.exec("ALTER TABLE stories ADD COLUMN setting_notes TEXT NOT NULL DEFAULT ''");
+      if(!storyColumns.has('revision'))this.db.exec('ALTER TABLE stories ADD COLUMN revision INTEGER NOT NULL DEFAULT 1');
+      if(!storyColumns.has('updated_at'))this.db.exec('ALTER TABLE stories ADD COLUMN updated_at TEXT');
+      this.db.exec(`UPDATE stories SET updated_at=created_at WHERE updated_at IS NULL;
+        PRAGMA user_version=5;`);
     });
   }
   close() { this.db.close(); }
@@ -133,7 +138,7 @@ export class Store {
   listStories({ query = '', sort = 'new', limit = 50, offset = 0, includeHidden = true } = {}) {
     query = text(query || ' ', '検索', 200, 0);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) throw new AppError('ページ指定が不正です。');
-    return this.db.prepare(`SELECT s.*,u.display_name author,
+    return this.db.prepare(`SELECT s.id,s.title,s.summary,s.author_id,s.created_at,s.hidden_from_home,s.main_branch_id,s.revision,s.updated_at,u.display_name author,
       (SELECT COUNT(*) FROM branches b WHERE b.story_id=s.id) branch_count,
       (SELECT COUNT(*) FROM chapters c JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) chapter_count,
       (SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) likes
@@ -147,12 +152,23 @@ export class Store {
     s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,c.created_at,c.updated_at,c.revision,c.author_id,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
     return s;
   }
-  setStoryVisibility(userId,id,input) {
+  setStoryVisibility(userId,id,input) {return this.updateStory(userId,id,input);}
+  updateStory(userId,id,input) {
     return this.transaction(()=>{
       const story=this.story(id);
-      if(story.author_id!==userId)throw new AppError('作品の表示設定は最初の制作者だけが変更できます。',403);
-      if(Object.keys(input).length!==1||typeof input.hiddenFromHome!=='boolean')throw new AppError('表示設定を真偽値で指定してください。');
-      this.db.prepare('UPDATE stories SET hidden_from_home=? WHERE id=?').run(input.hiddenFromHome?1:0,id);
+      if(story.author_id!==userId)throw new AppError('作品情報を編集できるのは最初の制作者だけです。',403);
+      const allowed=['title','summary','hiddenFromHome','settingNotes','expectedRevision'];
+      if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!allowed.includes(k))||Object.keys(input).length<2)throw new AppError('作品情報の指定が不正です。');
+      if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<1)throw new AppError('編集元の版を指定してください。');
+      if(input.expectedRevision!==story.revision)throw new AppError('別の更新が保存されています。入力を控え、最新の作品情報を確認してください。',409);
+      const title='title' in input?text(input.title,'作品名',120):story.title;
+      const summary='summary' in input?text(input.summary,'あらすじ',2000,0):story.summary;
+      if('hiddenFromHome' in input&&typeof input.hiddenFromHome!=='boolean')throw new AppError('表示設定を真偽値で指定してください。');
+      if('settingNotes' in input&&(typeof input.settingNotes!=='string'||input.settingNotes.length>100000))throw new AppError('設定メモは100000文字以内で入力してください。');
+      const notes='settingNotes' in input?input.settingNotes:story.setting_notes;
+      const hidden='hiddenFromHome' in input?(input.hiddenFromHome?1:0):story.hidden_from_home;
+      const updatedAt=new Date(Math.max(Date.now(),Date.parse(story.updated_at||story.created_at)+1)).toISOString();
+      this.db.prepare('UPDATE stories SET title=?,summary=?,hidden_from_home=?,setting_notes=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?').run(title,summary,hidden,notes,updatedAt,id,input.expectedRevision);
       return this.story(id);
     });
   }
@@ -180,7 +196,7 @@ export class Store {
       const storyId = Number(s.lastInsertRowid);
       const b = this.db.prepare('INSERT INTO branches(story_id,title,author_id) VALUES(?,?,?)').run(storyId, '本編',userId);
       const branchId = Number(b.lastInsertRowid);
-      this.db.prepare('UPDATE stories SET main_branch_id=? WHERE id=?').run(branchId,storyId);
+      this.db.prepare('UPDATE stories SET main_branch_id=?,updated_at=created_at WHERE id=?').run(branchId,storyId);
       const chapterId = this.insertChapter(branchId,null,chapterTitle,body,userId);
       return { storyId,branchId,chapterId };
     });
