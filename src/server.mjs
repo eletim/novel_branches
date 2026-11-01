@@ -7,7 +7,7 @@ import { Store, AppError } from './store.mjs';
 import { rpc } from './mcp.mjs';
 import { authSettings, OidcAuth, cookie, sessionCookie, appBasePath } from './auth.mjs';
 
-const staticFiles = {'/':['index.html','text/html; charset=utf-8'],'/reading.mjs':['reading.mjs','text/javascript; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+const staticFiles = {'/reader-mincho-v1.woff2':['reader-mincho-v1.woff2','font/woff2'],'/reader-font-OFL.txt':['reader-font-OFL.txt','text/plain; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/reading.mjs':['reading.mjs','text/javascript; charset=utf-8'],'/reader-settings.mjs':['reader-settings.mjs','text/javascript; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 function equal(a,b) { return typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b)); }
 async function rawBody(req, limit = 512000) {
   let size = 0, chunks = [];
@@ -144,7 +144,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
       const file = staticFiles[url.pathname];
       if (file && ['GET','HEAD'].includes(req.method)) {
         const content = await readFile(new URL(`../public/${file[0]}`,import.meta.url));
-        res.writeHead(200,{'Content-Type':file[1],'Cache-Control':'no-cache'});return res.end(req.method === 'HEAD' ? undefined : content);
+        res.writeHead(200,{'Content-Type':file[1],'Cache-Control':file[1]==='font/woff2'?'public, max-age=31536000, immutable':'no-cache'});return res.end(req.method === 'HEAD' ? undefined : content);
       }
       send(404,{error:'見つかりません。'});
     } catch(e) {
