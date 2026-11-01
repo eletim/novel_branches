@@ -81,9 +81,11 @@ HTTPS用cookieは `__Host-` 接頭辞、Secure、HttpOnly、SameSite=Lax、Path=
 
 公開用では共有文字列の `MCP_TOKEN` を受け付けません。Keycloak署名付きアクセストークンについて、issuer / audience `novel-mcp` / 有効期限 / `novel-member` ロール / `novels:read` scopeを検証します。MCPは閲覧専用です。
 
-配布realmの `novel-mcp` はリダイレクト先未登録・認可コードフロー無効で用意しています。実際に接続するMCPクライアントが決まった時点で、**そのクライアントの正確なredirect URIだけ**を登録し、Standard FlowとPKCE S256を設定してください。ワイルドカード、パスワードgrant、匿名公開は使いません。
+eletim.jpではcanonical audienceを `https://eletim.jp/novel/mcp` に設定している。Protected Resource Metadata、401の発見ヘッダー、OAuth scopeを持つツール定義、事前登録の `novel-chatgpt` クライアントを実装した。設定・登録・検証手順は [mcp.md](mcp.md#chatgptからの認証付き接続eletimjp) を参照。既存localhost fixtureの互換性のためComposeの既定audienceは `novel-mcp` のままとし、`--configure-mcp` がVPSの `.env` にcanonical URLを指定する。
 
-OAuth認可サーバーの自動発見（protected-resource metadata）や動的クライアント登録は未実装です。現在の公開用MCPは、設定済みのクライアントから渡されたBearerアクセストークンを検証するリソースサーバーです。ChatGPT側の実接続はまだ確認していません。アクセストークンの失効・ロール変更は最長5分のトークン期限まで反映に遅れます。
+KeycloakのResource Indicators機能を有効化し、`resource` をURL audienceに結び付ける。専用クライアントは認可コード＋PKCE S256・通常refresh tokenのみ。DCR・パスワードgrant・匿名本文閲覧は有効にしない。`/id/realms/novel-branches/clients-registrations/` はNginxで拒否する。元のOIDCメタデータはKeycloak既定のregistration_endpointを含むが、事前登録のClient IDを使い、RFC 8414の公開メタデータではDCRを広告しない。
+
+実ブラウザでKeycloak OAuthとMCPを検証する。ChatGPT側の登録・本人ログイン・会話からの呼び出しは別の確認であり、未実施の状態で実接続済みとは扱わない。アクセストークンの失効・ロール変更には最長5分の反映遅れがある。
 
 ## 隔離された実スタックテスト
 

@@ -23,7 +23,7 @@ Dockerを利用できるGitHub Actionsでは、Keycloak・PostgreSQL・Nginx・�
 ## 未実施
 
 - 実際のChatGPT環境へのOAuth接続設定・登録・読書確認。
-- 公開用MCPのOAuth自動発見・動的クライアント登録（現在はBearerトークン検証まで）。
+- ChatGPT側の接続登録と本人ログイン・実会話からの呼び出し。MCPの認証自動発見と事前登録OAuthクライアントは実装・配置済み。DCRは採用しない。
 - 投稿済み本文の編集/削除UI、一般公開向けの登録機能。
 
 公開用設定は [public-server.md](public-server.md) を参照してください。
@@ -41,3 +41,9 @@ Keycloak・Nginx・PostgreSQL・アプリを専用の127.0.0.1環境に導入し
 ntfy 2.27.0は実機でサブパスを拒否したため、ユーザー承認に基づき全設定・データをバックアップして停止。`/ntfy/` は410。Caddyは小説用に継続使用。詳細、アカウント追加、更新、両DBのバックアップ・復元は [eletim-vps.md](eletim-vps.md) を参照。
 
 公開後は約5分の実時間経過後のセッション期限も確認し、失敗した投稿の本文保持、Keycloak SSOによる `/novel/` への再ログイン、下書き復元、ログアウトが成功した。検証用3アカウントは再び無効化・セッション失効し、検証作品は保持した。
+
+## ChatGPT向けMCP OAuth（2026-11-01）
+
+Protected Resource Metadataと401の `WWW-Authenticate` / OAuth tool metadata、RFC 8414の認可サーバーメタデータを追加。VPSのKeycloak 26.8.1でResource Indicatorsを有効化し、専用の `novel-chatgpt` confidentialクライアントを事前登録した。認可コード・PKCE S256・同意画面・通常refresh token、canonical resource/audience `https://eletim.jp/novel/mcp` を使用する。署名・issuer・期限・参加ロール・read scopeを維持し、4つの閲覧ツールのみ。管理・DCR経路は非公開。
+
+自動テスト22件成功。外部の実ブラウザを使ったOAuthクライアントでコード交換・issuer識別、initialize、4ツール、refresh、匿名/不正トークン/ロールなし/scopeなし/不正PKCE/コード再利用/不正resourceの拒否を確認。既存Webのログイン・閲覧・投稿・分岐・グッド等の回帰検証も成功。詳細は [mcp.md](mcp.md)。ChatGPT本体の登録画面はこの作業環境から操作できないため、**ChatGPTからの実接続は未確認**。登録・本人認証後の会話テストは利用者側で必要。

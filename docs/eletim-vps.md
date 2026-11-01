@@ -115,3 +115,13 @@ Caddy設定の単一ファイルbind mountが旧inodeを参照し、最初のrel
 セッションの実時間期限確認: `node scripts/test-public-expiry.mjs`（約5分、パスワードgrantは使用しない）。認証情報・trace/HARは出力しない。証跡はローカルのGit管理外 `deploy/.test/evidence`。検証アカウントは終了後 `python3 scripts/public-admin.py --disable-verification` で無効化・ログアウトする。検証作品は既存作品とともに保持する。
 
 公開後の実ブラウザ確認は全件成功。HTTPS・静的ファイル・未ログイン導線、2人のログイン/ログアウト、新作/続話/分岐/入れ子、読書順/グッド、下書き・競合・誤投稿防止、PC/スマホ幅、`/novel/` のパス保持とロール拒否を確認。実時間約5分のCookie期限後、投稿401・下書き保持・Keycloak SSO・同じ作者IDでの下書き復元・ログアウトも成功。`/novel/health` を含む管理経路は404、未認証作品API401、`/ntfy/` は410。検証アカウント3名は終了後に再び無効化・セッション失効。新たな検証作品1件を含め計3件の検証作品を記録として保持し、既存作品は削除していない。
+
+## ChatGPT用の閲覧専用MCP
+
+公開MCP: `https://eletim.jp/novel/mcp`。登録値と具体的なChatGPT操作は [mcp.md](mcp.md#chatgptからの認証付き接続eletimjp)。既存Webとissuerは維持し、`novel-chatgpt` という別のconfidentialクライアントを設定した。secretは `deploy/.env` の `MCP_CHATGPT_CLIENT_SECRET` (0600)、Git管理外。`OIDC_MCP_AUDIENCE=https://eletim.jp/novel/mcp`。管理ユーザー `novel-admin` と参加者を混同しない。
+
+変更前バックアップ: `/home/ubuntu/novel-backups/20261101T000624Z`。新secretを含む変更後バックアップも必ず保存する。通常の両DBバックアップに `.env` と現在のCaddyfileが含まれる。更新ではsecretを再生成しない。
+
+Caddyは `/novel/*` に加え、PRMのRFC 9728標準パスとissuerのRFC 8414メタデータだけを正確一致で公開する。DCR・Keycloak管理・master realmは非公開。Nginxのテンプレート変更後は `dc up -d --no-deps --force-recreate nginx` でファイルbind mountを再作成する。Caddyfileは事前validate後に `cat deploy/caddy/Caddyfile.eletim > /home/ubuntu/notify-server/Caddyfile` で現在のinodeを保って反映し、コンテナ内の内容を確認してreloadする。
+
+ChatGPT本体の接続登録はユーザー操作が必要。登録画面の正確なcallbackが設定済みstable URLと異なる場合のみ `python3 scripts/public-admin.py --configure-mcp --chatgpt-callback '画面のURL'` を実行し、そのURIだけを許可する。秘密値は画面入力に使い、チャットには貼らない。

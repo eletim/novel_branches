@@ -60,10 +60,72 @@ stdioは同じPCのファイル権限でDBを読みます。Webと必ず同じ `
 
 結果はJSON文字列の `content` と、同じ内容の `structuredContent` で返します。作品本文はユーザーの文章として扱うための説明をツールに付けています。
 
-## ChatGPTについて
+## ChatGPTからの認証付き接続（eletim.jp）
 
-この実装はMCPサーバー側です。ChatGPTアカウントへのコネクター登録は実施していません。利用するChatGPT環境で外部MCPのURLと認証を設定できるか、実際の設定画面で確認する必要があります。インターネットから接続する場合はChatGPTから到達できるHTTPS URLが必要です。認証方法が合わない場合は、クライアント側設定または認証方式の追加で対応します。
+接続URLは **https://eletim.jp/novel/mcp**。匿名接続と共有トークンでは本文を読めません。既存の4ツールのみを公開し、投稿・編集ツールは追加していません。
+
+### 登録値
+
+| 項目 | 値 |
+|---|---|
+| 名前 | Novel Branches |
+| MCP URL / OAuth resource / audience | `https://eletim.jp/novel/mcp` |
+| 認証 | OAuth、事前登録クライアント（provided） |
+| Client ID | `novel-chatgpt` |
+| Client secret | VPSの `deploy/.env` にある `MCP_CHATGPT_CLIENT_SECRET`。Git・ログ・チャットへ貼らない |
+| Scope | `novels:read`（OIDCを要求するクライアントでは `openid novels:read`） |
+| Token endpoint auth | `client_secret_basic`（`client_secret_post`も利用可能） |
+| PKCE | S256必須 |
+| Protected Resource Metadata | `https://eletim.jp/novel/.well-known/oauth-protected-resource` |
+| Authorization server / issuer | `https://eletim.jp/id/realms/novel-branches` |
+| OAuth Authorization Server Metadata | `https://eletim.jp/.well-known/oauth-authorization-server/id/realms/novel-branches` |
+| OIDC discovery | `https://eletim.jp/id/realms/novel-branches/.well-known/openid-configuration` |
+| Authorization URL | `https://eletim.jp/id/realms/novel-branches/protocol/openid-connect/auth` |
+| Token URL | `https://eletim.jp/id/realms/novel-branches/protocol/openid-connect/token` |
+
+RFC 9728の標準配置 `https://eletim.jp/.well-known/oauth-protected-resource/novel/mcp` とルートの `/.well-known/oauth-protected-resource` も同じresourceを返します。未認証のMCPは401を返し、`WWW-Authenticate` の `resource_metadata` と `scope` で発見先を通知します。ツール定義にもOAuth scopeを明示しています。本文やユーザー情報はメタデータに含めません。
+
+### ChatGPT側の操作
+
+1. [ChatGPT Plugins](https://chatgpt.com/plugins) の追加ボタンから **Add custom MCP server** を開く（利用プラン・ワークスペースの権限で表示が制限される場合あり）。
+2. 名前と上記MCP URLを入力し、OAuthの事前登録クライアントとしてClient ID・secretを設定する。認証方式をNoneにはしない。入力欄がある場合はscopeに `novels:read` を指定する。エンドポイントは自動発見、手動指定を求められた場合は表のURLを使用する。
+3. 画面に表示される**正確なコールバックURL**を確認する。現状はRFC 9207のissuer識別を満たすため、OpenAI公式のstable callback `https://chatgpt.com/connector_platform_oauth_redirect` を登録済み。実際の画面が異なる場合は下記コマンドでそのURLだけに変更する。ワイルドカードは使わない。
+4. 登録を作成し、Keycloakの**novel-branches Realmの参加者**でログインして、閲覧権限を許可する。`master` Realmの `novel-admin` は参加者ではない。実利用者がまだなければ [VPS運用手順](eletim-vps.md) のアカウント追加を先に実施する。検証用アカウントは終了後に無効化する。
+5. 新しい会話でプラグインを選び、「作品一覧を取得して」「この作品の第1話を読んで」「この分岐を読む順番を教えて」と依頼する。`list_stories` → `get_story` → `get_chapter` / `get_branch_path` の取得を確認する。
+
+現在の操作画面は [OpenAI公式の接続手順](https://developers.openai.com/plugins/deploy/connect-chatgpt)、OAuthの要件とコールバック選択は [公式認証ガイド](https://developers.openai.com/plugins/build/auth) に基づく。登録を操作できるChatGPTセッションはこの作業環境には接続されていないため、登録と本人ログインは利用者側の操作が必要。
+
+### クライアントの設定と更新
+
+```bash
+cd /home/ubuntu/novel_branches
+python3 scripts/public-admin.py --configure-mcp
+# ChatGPT画面が別のURLを表示した場合のみ、正確なURLを指定する
+python3 scripts/public-admin.py --configure-mcp --chatgpt-callback 'https://chatgpt.com/connector/oauth/実際のcallback_id'
+```
+
+コマンドは専用secretを初回だけ生成し、既存secretを再生成しない。保存値とKeycloakが不一致なら停止する。`OIDC_MCP_AUDIENCE` を正規MCP URLへ設定する。既存Webクライアント、ユーザー、パスワード、作品は変更しない。CLIが許可するcallbackは上記stable URLまたはChatGPTのcallback ID付きの厳密なHTTPS URLのみ。
+
+Keycloak 26.8.1の `resource-indicators` を有効化し、resource server client `novel-mcp` の `resource_url` と専用クライアントのaudience mapperを使って、認可・コード交換のresourceを検証する。`novel-chatgpt` は認可コード＋refresh tokenのみ、PKCE S256必須、パスワードgrant・implicit・service accountは無効。動的クライアント登録は公開Nginxで拒否し、メタデータのOAuth側にも登録エンドポイントを広告しない。
+
+Resource IndicatorsはこのKeycloak版ではexperimentalであるため、バージョンを固定して実OAuthで検証した。アップグレード時は [Keycloak公式MCPガイド](https://www.keycloak.org/securing-apps/mcp-authz-server) と同梱テストで互換性を再確認する。CIMDやDCRは有効化していない。
+
+APIは署名・issuer・canonical URL audience・期限・`novel-member`・`novels:read` を毎回検証する。アクセストークンは約5分。通常のrefresh tokenを使用し、offline accessは要求しない。SSOのアイドル約30分・最大約8時間等のRealmポリシーでrefresh tokenも失効するため、その場合は再接続・再ログインする。
+
+### 再現用検証
+
+```bash
+npm test
+# VPSで専用の検証アカウントだけを有効にしたうえで実行
+node scripts/test-mcp-public.mjs
+TEST_STACK_ENV=deploy/.test/public.env npm run test:browser
+```
+
+`test-mcp-public.mjs` はGit管理外の `deploy/.test/public.env` と `chatgpt.env` を読む。後者にはClient ID・secret・callbackを0600で保存する。認証コード・トークンをログ・trace/HARへ出さない。ChatGPT向けcallbackへのリダイレクトはテストブラウザ内で横取りし、Keycloakの実コードを実HTTPSエンドポイントで交換する。**これは実ブラウザによるOAuth/MCP検証であり、ChatGPT本体からの接続確認ではない。**
+
+initialize、4ツール、更新トークン、匿名・不正トークン・ロール/scope不足・不正PKCE・認可コード再利用・不正resourceの拒否を確認する。さらに実時間約5分待って期限切れアクセストークンの拒否とrefreshによる復帰を確認する。既存Webのログイン・閲覧・投稿は別のブラウザ回帰検証で確認する。
 
 実装時の参照仕様：
-- https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
-- https://modelcontextprotocol.io/specification/2025-06-18/server/tools
+- https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
+- https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
+- https://modelcontextprotocol.io/specification/2025-11-25/server/tools

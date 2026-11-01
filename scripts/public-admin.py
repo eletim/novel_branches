@@ -13,7 +13,7 @@ let input='';for await(const chunk of process.stdin)input+=chunk;
 const c=JSON.parse(input),base='http://keycloak:8080/id';
 async function request(path,method='GET',data,token){
  const r=await fetch(base+path,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined});
- if(!r.ok)throw Error('Keycloak request failed: '+r.status);
+ if(!r.ok)throw Error('Keycloak request failed: '+method+' '+path+' status '+r.status);
  const body=await r.text();return body?JSON.parse(body):null;
 }
 const r=await fetch(base+'/realms/master/protocol/openid-connect/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:'admin-cli',grant_type:'password',username:c.admin,password:c.secret})});
@@ -25,7 +25,7 @@ if(c.configureMcp){
  if(!server)throw Error('MCP resource client not found');
  await request(realm+'/clients/'+server.id,'PUT',{attributes:{...server.attributes,resource_url:resource}},token);
  const [existing]=await request(realm+'/clients?clientId=novel-chatgpt','GET',null,token);
- const client={clientId:'novel-chatgpt',name:'Novel Branches — ChatGPT read only',enabled:true,protocol:'openid-connect',publicClient:false,clientAuthenticatorType:'client-secret',standardFlowEnabled:true,directAccessGrantsEnabled:false,implicitFlowEnabled:false,serviceAccountsEnabled:false,fullScopeAllowed:false,consentRequired:true,redirectUris:[c.callback],webOrigins:[],attributes:{'pkce.code.challenge.method':'S256','use.refresh.tokens':'true','oauth2.device.authorization.grant.enabled':'false'},defaultClientScopes:['basic'],optionalClientScopes:['profile','novels:read'],protocolMappers:server.protocolMappers};
+ const client={clientId:'novel-chatgpt',name:'Novel Branches — ChatGPT read only',enabled:true,protocol:'openid-connect',publicClient:false,clientAuthenticatorType:'client-secret',standardFlowEnabled:true,directAccessGrantsEnabled:false,implicitFlowEnabled:false,serviceAccountsEnabled:false,fullScopeAllowed:false,consentRequired:true,redirectUris:[c.callback],webOrigins:[],attributes:{'pkce.code.challenge.method':'S256','use.refresh.tokens':'true','oauth2.device.authorization.grant.enabled':'false'},defaultClientScopes:['basic'],optionalClientScopes:['profile','novels:read'],protocolMappers:server.protocolMappers.map(({id,...mapper})=>mapper)};
  if(existing){const saved=await request(realm+'/clients/'+existing.id+'/client-secret','GET',null,token);if(saved.value!==c.mcpSecret)throw Error('Stored ChatGPT client secret differs; restore the existing credential instead of rotating it');await request(realm+'/clients/'+existing.id,'PUT',{...client,attributes:{...existing.attributes,...client.attributes}},token);}
  else {await request(realm+'/clients','POST',{...client,secret:c.mcpSecret},token);}
  const [configured]=await request(realm+'/clients?clientId=novel-chatgpt','GET',null,token);
