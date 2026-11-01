@@ -49,3 +49,7 @@ Protected Resource Metadataと401の `WWW-Authenticate` / OAuth tool metadata、
 自動テスト22件成功。外部の実ブラウザを使ったOAuthクライアントでコード交換・issuer識別、initialize、4ツール、refresh、匿名/不正トークン/ロールなし/scopeなし/不正PKCE/コード再利用/不正resourceの拒否を確認。既存Webのログイン・閲覧・投稿・分岐・グッド等の回帰検証も成功。詳細は [mcp.md](mcp.md)。ChatGPT本体の登録画面はこの作業環境から操作できないため、**ChatGPTからの実接続は未確認**。登録・本人認証後の会話テストは利用者側で必要。
 
 実時間約5分待ってMCPアクセストークン期限後の本文取得401と、refresh tokenによる復帰も確認した。終了後は検証用3アカウントを無効化・ログアウトし、変更後の秘密値・認証設定を含む両DBバックアップを取得済み。
+
+## ChatGPT invalid_scope対応（2026-11-01）
+
+`openid offline_access` のinvalid_scopeを再現し、専用クライアントのoffline scope/role mapping不足を修正した。`novels:read` はdefault scopeとして同意後のトークンに含め、MCP側の必須権限検証を維持する。Keycloak offline refresh時にURL audienceが失われる挙動も確認し、独立した固定URL Audience mapperで更新後もURL audienceを保つ。ユーザー・作品・secret・callbackは維持。署名付きscope組み合わせテストを追加して自動テスト23件成功。

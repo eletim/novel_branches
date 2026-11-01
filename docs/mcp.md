@@ -73,7 +73,7 @@ stdioは同じPCのファイル権限でDBを読みます。Webと必ず同じ `
 | 認証 | OAuth、事前登録クライアント（provided） |
 | Client ID | `novel-chatgpt` |
 | Client secret | VPSの `deploy/.env` にある `MCP_CHATGPT_CLIENT_SECRET`。Git・ログ・チャットへ貼らない |
-| Scope | `novels:read`（OIDCを要求するクライアントでは `openid novels:read`） |
+| Scope | `openid offline_access novels:read`（`profile` も許可） |
 | Token endpoint auth | `client_secret_basic`（`client_secret_post`も利用可能） |
 | PKCE | S256必須 |
 | Protected Resource Metadata | `https://eletim.jp/novel/.well-known/oauth-protected-resource` |
@@ -88,7 +88,7 @@ RFC 9728の標準配置 `https://eletim.jp/.well-known/oauth-protected-resource/
 ### ChatGPT側の操作
 
 1. [ChatGPT Plugins](https://chatgpt.com/plugins) の追加ボタンから **Add custom MCP server** を開く（利用プラン・ワークスペースの権限で表示が制限される場合あり）。
-2. 名前と上記MCP URLを入力し、OAuthの事前登録クライアントとしてClient ID・secretを設定する。認証方式をNoneにはしない。入力欄がある場合はscopeに `novels:read` を指定する。エンドポイントは自動発見、手動指定を求められた場合は表のURLを使用する。
+2. 名前と上記MCP URLを入力し、OAuthの事前登録クライアントとしてClient ID・secretを設定する。認証方式をNoneにはしない。入力欄がある場合はscopeに `openid offline_access novels:read` を指定する。エンドポイントは自動発見、手動指定を求められた場合は表のURLを使用する。
 3. 画面に表示される**正確なコールバックURL**を確認する。現状はRFC 9207のissuer識別を満たすため、OpenAI公式のstable callback `https://chatgpt.com/connector_platform_oauth_redirect` を登録済み。実際の画面が異なる場合は下記コマンドでそのURLだけに変更する。ワイルドカードは使わない。
 4. 登録を作成し、Keycloakの**novel-branches Realmの参加者**でログインして、閲覧権限を許可する。`master` Realmの `novel-admin` は参加者ではない。実利用者がまだなければ [VPS運用手順](eletim-vps.md) のアカウント追加を先に実施する。検証用アカウントは終了後に無効化する。
 5. 新しい会話でプラグインを選び、「作品一覧を取得して」「この作品の第1話を読んで」「この分岐を読む順番を教えて」と依頼する。`list_stories` → `get_story` → `get_chapter` / `get_branch_path` の取得を確認する。
@@ -106,11 +106,11 @@ python3 scripts/public-admin.py --configure-mcp --chatgpt-callback 'https://chat
 
 コマンドは専用secretを初回だけ生成し、既存secretを再生成しない。保存値とKeycloakが不一致なら停止する。`OIDC_MCP_AUDIENCE` を正規MCP URLへ設定する。既存Webクライアント、ユーザー、パスワード、作品は変更しない。CLIが許可するcallbackは上記stable URLまたはChatGPTのcallback ID付きの厳密なHTTPS URLのみ。
 
-Keycloak 26.8.1の `resource-indicators` を有効化し、resource server client `novel-mcp` の `resource_url` と専用クライアントのaudience mapperを使って、認可・コード交換のresourceを検証する。`novel-chatgpt` は認可コード＋refresh tokenのみ、PKCE S256必須、パスワードgrant・implicit・service accountは無効。動的クライアント登録は公開Nginxで拒否し、メタデータのOAuth側にも登録エンドポイントを広告しない。
+Keycloak 26.8.1の `resource-indicators` を有効化し、resource server client `novel-mcp` の `resource_url` と専用クライアントのaudience mapperを使って、認可・コード交換のresourceを検証する。`novel-chatgpt` は認可コード＋通常/offline refresh tokenのみ、PKCE S256必須、パスワードgrant・implicit・service accountは無効。動的クライアント登録は公開Nginxで拒否し、メタデータのOAuth側にも登録エンドポイントを広告しない。
 
 Resource IndicatorsはこのKeycloak版ではexperimentalであるため、バージョンを固定して実OAuthで検証した。アップグレード時は [Keycloak公式MCPガイド](https://www.keycloak.org/securing-apps/mcp-authz-server) と同梱テストで互換性を再確認する。CIMDやDCRは有効化していない。
 
-APIは署名・issuer・canonical URL audience・期限・`novel-member`・`novels:read` を毎回検証する。アクセストークンは約5分。通常のrefresh tokenを使用し、offline accessは要求しない。SSOのアイドル約30分・最大約8時間等のRealmポリシーでrefresh tokenも失効するため、その場合は再接続・再ログインする。
+APIは署名・issuer・canonical URL audience・期限・`novel-member`・`novels:read` を毎回検証する。アクセストークンは約5分。ChatGPTが要求する `offline_access` を受け入れ、offline refresh tokenを発行する。現在のRealmではoffline idle timeoutは30日で、利用中の最大期間制限は未設定。通常のWeb SSO（アイドル約30分・最大約8時間）とは別に維持される。失効・同意取り消し後は再接続・再ログインする。
 
 ### 再現用検証
 
@@ -123,9 +123,31 @@ TEST_STACK_ENV=deploy/.test/public.env npm run test:browser
 
 `test-mcp-public.mjs` はGit管理外の `deploy/.test/public.env` と `chatgpt.env` を読む。後者にはClient ID・secret・callbackを0600で保存する。認証コード・トークンをログ・trace/HARへ出さない。ChatGPT向けcallbackへのリダイレクトはテストブラウザ内で横取りし、Keycloakの実コードを実HTTPSエンドポイントで交換する。**これは実ブラウザによるOAuth/MCP検証であり、ChatGPT本体からの接続確認ではない。**
 
-initialize、4ツール、更新トークン、匿名・不正トークン・ロール/scope不足・不正PKCE・認可コード再利用・不正resourceの拒否を確認する。さらに実時間約5分待って期限切れアクセストークンの拒否とrefreshによる復帰を確認する。既存Webのログイン・閲覧・投稿は別のブラウザ回帰検証で確認する。
+initialize、4ツール、offline更新トークン、匿名・不正トークン・ロール不足（scope不足は署名付きトークンの単体テスト）・不正PKCE・認可コード再利用・不正resourceの拒否を確認する。さらに実時間約5分待って期限切れアクセストークンの拒否とrefreshによる復帰を確認する。既存Webのログイン・閲覧・投稿は別のブラウザ回帰検証で確認する。
 
 実装時の参照仕様：
 - https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
 - https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 - https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+
+## invalid_scope: openid offline_access の修正（2026-11-01）
+
+実際の要求で `openid` 単独は成功、`openid offline_access` と3スコープの要求は `invalid_scope` を返すことを再現した。原因は `offline_access` が `novel-chatgpt` のOptional client scopeに未割り当てだったこと。エラー表示は要求した全scopeを含むため、`openid` 自体の拒否ではなかった。`openid` はKeycloakのOIDC用特別scopeで、同名の偽client scopeは追加していない。
+
+修正した設定:
+
+- Default client scopes: `basic`, `novels:read`。
+- Optional client scopes: `profile`, `offline_access`。
+- クライアントのrealm role scope mapping: `novel-member`, `offline_access`。
+- `koji` を含む既存参加者は既定realm role経由で `offline_access` を既に持っていたため、ユーザーのロール・パスワードは変更していない。
+- `novels:read` は専用の閲覧クライアントの既定scopeに移し、ChatGPTが `openid offline_access` だけを要求しても同意画面を経て発行トークンに含まれる。MCP側でread scopeや参加ロールを省略して許可する実装ではない。
+- 独自のMCP検証はscopeをスペースで分割し `novels:read` の厳密な要素一致を要求する。文字列全体の一致やOIDC scopeの拒否はしていない。scope順序・追加scope・複数スペースを許可し、`novels:reader` やreadなしは拒否するテストを追加した。
+- OAuth discoveryにも `offline_access` を広告する。PRMと各ツールで要求する業務権限は `novels:read` のまま。
+
+さらに、この版のKeycloakではoffline refresh時にresourceによるaudienceの変換が失われ、access tokenのaudが `novel-mcp` へ戻る挙動を実測した（[上流の関連issue](https://github.com/keycloak/keycloak/issues/53261)）。専用クライアントにcanonical URLのみを追加する**独立したAudience mapper**を設定し、更新後もMCPが要求するURL audienceを含める。Keycloakの同じmapperにclient audienceとcustom audienceを併記すると前者が優先されるため、2つを分けている。MCPの検証に旧client IDを追加して緩和する変更はしていない。更新後のaudはcanonical URLと既存resource client IDのみで、別resourceの権限は付けない。resource指定を切り替えて複数MCPへ委譲する用途には使わない。
+
+既存クライアントのscope紐付けとmapperはAdmin RESTの専用エンドポイントでも更新し、再起動のrealm再インポートに依存しない。Client ID・secret・callbackは維持する。
+
+ChatGPT側は同じ設定で**OAuth認証を再実行**し、新たなoffline/read権限に同意する。通常は再登録不要。古いメタデータが残る場合は接続のRefreshを行い、それでも改善しない場合だけ同じURL/Client ID/secretで接続を作り直す。scope欄がある場合は上記の3scopeを入力する。
+
+検証用ユーザーの後片付けではユーザー無効化・オンラインログアウトに加え、`novel-chatgpt` への同意とoffline tokenも取り消す。この操作の対象は専用の検証ユーザー3名だけで、`koji` の同意・セッションは変更しない。

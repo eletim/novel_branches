@@ -131,3 +131,11 @@ ChatGPT本体の接続登録はユーザー操作が必要。登録画面の正�
 ログ対策: Nginxの通常アクセスログはqueryを省いたpath/statusのみ。大きなKeycloak CSSのbuffer警告がRefererの認証stateを記録するケースを検出したため、Nginxのエラーログはcritical以上に制限し、診断にはpath/statusログを使用する。CaddyのruntimeログからHTTP requestオブジェクト全体を除き、接続障害時にもcallback query・Cookie・Authorizationを記録しない。パスワード・client secret・アクセストークンのログ出力は検出されていない。
 
 ログ対策後は、隔離したCaddyで上流接続エラーを発生させ、擬似code/state・Referer・Authorization・Cookieがログに含まれないことを確認した。公開Keycloakログイン画面の大きなCSS読み込みも再確認し、稼働中ログの秘密値・認証クエリ検査はいずれも検出なし。
+
+## ChatGPT offline scope対応（2026-11-01）
+
+変更前バックアップ: `/home/ubuntu/novel-backups/20261101T011842Z`。`offline_access` を専用クライアントのoptional scopeとrole scopeに追加し、`novels:read` をdefault scopeへ移した。`openid offline_access` の実要求でも閲覧権限を明示した同意を経て発行できる。OAuth discoveryはoffline scopeを広告する。独自のMCP検証は引き続き署名・issuer・URL audience・期限・`novel-member`・`novels:read` を必須とする。
+
+Keycloak 26.8.1のoffline refresh時のaudience差を補うため、canonical URLを付ける独立したAudience mapperを専用クライアントに設定する。client audienceとcustom audienceは別mapperにする。クライアントsecret、callback、既存Webクライアントは変更しない。参加者 `koji` のパスワード・ユーザー情報・ロール・同意は変更しない。設定詳細と再認証操作は [mcp.md](mcp.md#invalid_scope-openid-offline_access-の修正2026-11-01) を参照。
+
+offline refresh tokenは通常のWeb SSO終了後も有効で、現設定のidle期限は30日。検証ユーザーを無効化するCLIは、検証ユーザーの専用クライアントへの同意・offline grantも取り消す。

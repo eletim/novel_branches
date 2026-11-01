@@ -70,7 +70,7 @@ try {
  const branch=story.branches.find(b=>b.fork_chapter_id)||story.branches[0];const path=await call('get_branch_path',{branchId:branch.id});assert.ok(path.chapters.length);assert.equal(path.chapters.at(-1).id,branch.head_id);
  const write=await rpc(login.data.access_token,'tools/call',{name:'create_story',arguments:{}});assert.equal(write.data.error.code,-32602);
  console.log('PASS public MCP: code + S256 + issuer identification, initialize, four read tools, no write tool');
- stage='refresh';const refreshed=await token({grant_type:'refresh_token',refresh_token:login.data.refresh_token,resource});assert.equal(refreshed.status,200,refreshed.data.error);assert.equal((await rpc(refreshed.data.access_token,'tools/list')).status,200);
+ stage='refresh';const refreshed=await token({grant_type:'refresh_token',refresh_token:login.data.refresh_token,resource});assert.equal(refreshed.status,200,refreshed.data.error);const refreshClaims=JSON.parse(Buffer.from(refreshed.data.access_token.split('.')[1],'base64url'));assert.ok([refreshClaims.aud].flat().includes(resource));assert.ok([refreshClaims.aud].flat().every(a=>[resource,'novel-mcp'].includes(a)));assert.equal((await rpc(refreshed.data.access_token,'tools/list')).status,200);
  console.log('PASS public MCP: refresh token with canonical resource');
  stage='negative authorization';assert.equal((await rpc(null,'tools/list')).status,401);assert.equal((await rpc('not-a-token','tools/list')).status,401);
  for(const [name,options] of [['outsider',{}]]){stage='negative '+name+' '+options.scope;const denied=await grant(name,options);assert.equal(denied.status,200);assert.equal((await rpc(denied.data.access_token,'tools/call',{name:'get_chapter',arguments:{chapterId:chapter.id}})).status,401);}

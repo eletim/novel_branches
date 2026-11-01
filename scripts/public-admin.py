@@ -29,6 +29,15 @@ if(c.configureMcp){
  if(existing){const saved=await request(realm+'/clients/'+existing.id+'/client-secret','GET',null,token);if(saved.value!==c.mcpSecret)throw Error('Stored ChatGPT client secret differs; restore the existing credential instead of rotating it');await request(realm+'/clients/'+existing.id,'PUT',{...client,attributes:{...existing.attributes,...client.attributes}},token);}
  else {await request(realm+'/clients','POST',{...client,secret:c.mcpSecret},token);}
  const [configured]=await request(realm+'/clients?clientId=novel-chatgpt','GET',null,token);
+ const currentMappers=await request(realm+'/clients/'+configured.id+'/protocol-mappers/models','GET',null,token);
+ const audience=currentMappers.find(m=>m.name==='mcp-audience');if(!audience)throw Error('MCP audience mapper missing');
+ // Keycloak 26.8 gives included.client.audience precedence over custom in the SAME mapper.
+ // A separate fixed-resource mapper also binds offline refreshes to this MCP URL.
+ const {['included.custom.audience']:unused,...legacyAudience}=audience.config;
+ await request(realm+'/clients/'+configured.id+'/protocol-mappers/models/'+audience.id,'PUT',{...audience,config:legacyAudience},token);
+ const fixed=currentMappers.find(m=>m.name==='mcp-resource-audience');
+ const fixedMapper={name:'mcp-resource-audience',protocol:'openid-connect',protocolMapper:'oidc-audience-mapper',config:{'included.custom.audience':resource,'id.token.claim':'false','access.token.claim':'true','introspection.token.claim':'true'}};
+ await request(realm+'/clients/'+configured.id+'/protocol-mappers/models'+(fixed?'/'+fixed.id:''),fixed?'PUT':'POST',{...fixedMapper,...(fixed?{id:fixed.id}:{})},token);
  const scopes=await request(realm+'/client-scopes','GET',null,token);
  const readScope=scopes.find(s=>s.name==='novels:read'),offlineScope=scopes.find(s=>s.name==='offline_access');
  if(!readScope||!offlineScope)throw Error('Required read/offline client scope missing');
@@ -48,7 +57,7 @@ if(c.configure){
 }
 for(const u of c.users){
  const existing=await request(realm+'/users?exact=true&username='+encodeURIComponent(u.username),'GET',null,token);
- if(c.disable){if(existing.length){await request(realm+'/users/'+existing[0].id,'PUT',{enabled:false},token);await request(realm+'/users/'+existing[0].id+'/logout','POST',null,token);}continue;}
+ if(c.disable){if(existing.length){await request(realm+'/users/'+existing[0].id,'PUT',{enabled:false},token);await request(realm+'/users/'+existing[0].id+'/logout','POST',null,token);const consents=await request(realm+'/users/'+existing[0].id+'/consents','GET',null,token);if(consents.some(x=>x.clientId==='novel-chatgpt'))await request(realm+'/users/'+existing[0].id+'/consents/novel-chatgpt','DELETE',null,token);}continue;}
  if(existing.length&&!c.resume)throw Error('User already exists; no changes made to that user');
  if(!existing.length)
  await request(realm+'/users','POST',{username:u.username,enabled:true,firstName:u.display,lastName:u.last||undefined,email:u.email||undefined,credentials:[{type:'password',value:u.password,temporary:u.temporary}],requiredActions:u.temporary?['UPDATE_PASSWORD']:[]},token);
