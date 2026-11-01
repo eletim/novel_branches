@@ -53,3 +53,5 @@ Protected Resource Metadataと401の `WWW-Authenticate` / OAuth tool metadata、
 ## ChatGPT invalid_scope対応（2026-11-01）
 
 `openid offline_access` のinvalid_scopeを再現し、専用クライアントのoffline scope/role mapping不足を修正した。`novels:read` はdefault scopeとして同意後のトークンに含め、MCP側の必須権限検証を維持する。Keycloak offline refresh時にURL audienceが失われる挙動も確認し、独立した固定URL Audience mapperで更新後もURL audienceを保つ。ユーザー・作品・secret・callbackは維持。署名付きscope組み合わせテストを追加して自動テスト23件成功。
+
+外部実ブラウザで `openid offline_access` と3scopeの認可成功、offline token発行、4ツール、通常の即時更新と実時間の期限切れ後のoffline更新を確認した。更新後のJWTにもURL audienceを要求し、権限不足の拒否を維持。既存Webの回帰検証成功。検証アカウントとそのoffline grantは無効化し、変更後バックアップを取得済み。ChatGPT本体での認証は利用者の再試行待ち。

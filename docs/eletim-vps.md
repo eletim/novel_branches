@@ -139,3 +139,7 @@ ChatGPT本体の接続登録はユーザー操作が必要。登録画面の正�
 Keycloak 26.8.1のoffline refresh時のaudience差を補うため、canonical URLを付ける独立したAudience mapperを専用クライアントに設定する。client audienceとcustom audienceは別mapperにする。クライアントsecret、callback、既存Webクライアントは変更しない。参加者 `koji` のパスワード・ユーザー情報・ロール・同意は変更しない。設定詳細と再認証操作は [mcp.md](mcp.md#invalid_scope-openid-offline_access-の修正2026-11-01) を参照。
 
 offline refresh tokenは通常のWeb SSO終了後も有効で、現設定のidle期限は30日。検証ユーザーを無効化するCLIは、検証ユーザーの専用クライアントへの同意・offline grantも取り消す。
+
+検証結果: 自動テスト23件成功。外部ブラウザの認可コード＋PKCEで、3scopeと `openid offline_access` のみの要求、offline token（typ=Offline）発行、4つの閲覧ツール、更新後のURL audience、実時間約5分後の期限切れ拒否とoffline refreshによる復帰を確認。既存Webの2人ログイン・閲覧・新作/続話/分岐/グッド等の回帰確認も成功した。無関係な未知scopeは引き続きinvalid_scope。MCPのscope欠落・似た名前のscopeは署名付きトークンのテストで401。検証ユーザー3名は終了後に無効化し、専用クライアントの同意・offline grantも取り消した。
+
+変更後バックアップ: `/home/ubuntu/novel-backups/20261101T013251Z`（日本時間2026-11-01 10:32:51）。DB・ユーザー・作品・client secret・callbackは保持。ChatGPT側では既存接続で再認証し、offline/readの同意を許可する。通常は再登録不要。ChatGPT本体での再接続成功は利用者の再試行後に確認する。
