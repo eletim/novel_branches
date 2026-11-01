@@ -151,3 +151,7 @@ initialize、4ツール、offline更新トークン、匿名・不正トーク�
 ChatGPT側は同じ設定で**OAuth認証を再実行**し、新たなoffline/read権限に同意する。通常は再登録不要。古いメタデータが残る場合は接続のRefreshを行い、それでも改善しない場合だけ同じURL/Client ID/secretで接続を作り直す。scope欄がある場合は上記の3scopeを入力する。
 
 検証用ユーザーの後片付けではユーザー無効化・オンラインログアウトに加え、`novel-chatgpt` への同意とoffline tokenも取り消す。この操作の対象は専用の検証ユーザー3名だけで、`koji` の同意・セッションは変更しない。
+
+## 各話の更新情報
+
+get_storyのchapters、get_chapter、get_branch_pathは各話のauthor_id/author、updated_at、revisionと最新本文を返す。作品・branchの作成者と話の制作者は別。共有される話の編集はすべての経路で同じ内容になる。4つの閲覧ツールのみで、編集・投稿APIはMCPに公開しない。OAuth、novel-member、novels:readの必須検証は変更していない。

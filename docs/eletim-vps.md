@@ -143,3 +143,17 @@ offline refresh tokenは通常のWeb SSO終了後も有効で、現設定のidle
 検証結果: 自動テスト23件成功。外部ブラウザの認可コード＋PKCEで、3scopeと `openid offline_access` のみの要求、offline token（typ=Offline）発行、4つの閲覧ツール、更新後のURL audience、実時間約5分後の期限切れ拒否とoffline refreshによる復帰を確認。既存Webの2人ログイン・閲覧・新作/続話/分岐/グッド等の回帰確認も成功した。無関係な未知scopeは引き続きinvalid_scope。MCPのscope欠落・似た名前のscopeは署名付きトークンのテストで401。検証ユーザー3名は終了後に無効化し、専用クライアントの同意・offline grantも取り消した。
 
 変更後バックアップ: `/home/ubuntu/novel-backups/20261101T013251Z`（日本時間2026-11-01 10:32:51）。DB・ユーザー・作品・client secret・callbackは保持。ChatGPT側では既存接続で再認証し、offline/readの同意を許可する。通常は再登録不要。ChatGPT本体での再接続成功は利用者の再試行後に確認する。
+
+## 目次・話の共同投稿と編集（2026-11-01）
+
+変更前の両DBバックアップ: `/home/ubuntu/novel-backups/20261101T031826Z`（コード254c339）。SQLiteコピーでv3移行を先行実行し、users/stories/branches/chapters/likes/oidc_identitiesの既存列のハッシュ一致、外部キー整合、全読書経路を確認した。5作品・15分岐・30話・5票と既存ユーザーを保持する追加移行。Keycloakの設定・秘密値・volumeは変更しない。
+
+chaptersにauthor_id/updated_at/revisionを追加する。過去の話は当時の所属branch作者、作成日時、revision=1で補完する。以降は実際の投稿者を保存する。参加者ならどの経路にも続話・別案を追加できる。編集は話の制作者のみ、サーバーでも照合しexpectedRevisionによる競合拒否を行う。親子関係・制作者・グッドは編集で変更しない。共通話の編集は全経路とMCPに反映する。
+
+作品ページは縦の目次とし、同じ親を持つ候補だけをbranchボタンで選ぶ。第一話・途中・入れ子の候補と本文・前後移動・目次復帰で経路を保持する。編集と続話の下書きには元のrevision/headを保持し、競合や通信失敗でも消さない。競合後は内容を退避してから明示的に最新状態を読み直し、入力を反映する。
+
+公開反映はappだけをbuild/recreateし、Nginxをreloadした。`TEST_STACK_ENV=deploy/.test/public.env npm run test:browser`で実HTTPS・Keycloakログイン、他者の続話と作者表示、本人の編集成功/他者403、共有本文と更新日時、第一話/途中/入れ子の候補、経路保持、編集/投稿競合と入力・下書き復元、一時503時の入力保持、グッド・検索、PC/375pxモバイルを確認済み。証跡はGit管理外 `deploy/.test/evidence/episodes-public`。自動テスト27件成功。Dockerの隔離した全スタックテストはローカルでは未実行で、公開環境のブラウザとOAuth/MCPで回帰確認する。
+
+v3移行後の取り消しは、この更新前の両DBバックアップと対応コードをセットで新しい復元用volumeへ戻す。旧版コードをv3 DBへ直接戻して書き込まない。現在の両DBも事前バックアップし、復元後に失う投稿・編集の範囲を確認する。`down -v`やDB初期化は不要。
+
+今回追加した検証作品・話は検証記録として保持し、専用アカウントは検証終了後に無効化・セッション失効・MCP offline grant取消を行う。実利用者kojiの設定やパスワードは変更しない。

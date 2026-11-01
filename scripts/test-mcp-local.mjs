@@ -6,7 +6,7 @@ const config=process.env.TEST_STACK_ENV||'deploy/.test/stack.env';
 assert.ok(['deploy/.test/stack.env','deploy/.test/vpn.env'].includes(config));
 process.loadEnvFile(config);
 const origin=process.env.APP_ORIGIN;assert.ok(origin==='https://localhost:8443'||(config==='deploy/.test/vpn.env' && /^https:\/\/[a-z0-9.-]+\.ts\.net:8443$/.test(origin)));
-const evidence=JSON.parse(readFileSync('deploy/.test/evidence/browser.json'));
+const evidence=JSON.parse(readFileSync('deploy/.test/evidence/episodes-public/episodes.json'));
 async function token(name,scope='openid novels:read'){
  const r=await fetch(origin+'/id/realms/novel-branches/protocol/openid-connect/token',{method:'POST',body:new URLSearchParams({grant_type:'password',client_id:'novel-mcp',username:'test-'+name,password:process.env['TEST_'+name.toUpperCase()+'_PASSWORD'],scope})});assert.equal(r.status,200);return (await r.json()).access_token;
 }
@@ -36,11 +36,12 @@ assert.equal((await rpc(wrong,'tools/list')).status,401);
 assert.equal((await rpc(access,'initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'localhost-verifier',version:'1'}})).status,200);
 const names=(await rpc(access,'tools/list')).body.result.tools.map(t=>t.name).sort();assert.deepEqual(names,['get_branch_path','get_chapter','get_story','list_stories']);
 const snapshot={};
-for(const [name,args] of [['list_stories',{}],['get_story',{storyId:evidence.story}],['get_chapter',{chapterId:evidence.third}],['get_branch_path',{branchId:evidence.nestedBranch}]]){
- const r=await rpc(access,'tools/call',{name,arguments:args});assert.equal(r.status,200);assert.ok(r.body.result.structuredContent);snapshot[name]=r.body.result.structuredContent;
+for(const [name,args] of [['list_stories',{}],['get_story',{storyId:evidence.story}],['get_chapter',{chapterId:evidence.nested}],['get_branch_path',null]]){
+ const argumentsForTool=args||{branchId:snapshot.get_story.branches.find(b=>b.head_id===evidence.nestedFourth).id};
+ const r=await rpc(access,'tools/call',{name,arguments:argumentsForTool});assert.equal(r.status,200);assert.ok(r.body.result.structuredContent);snapshot[name]=r.body.result.structuredContent;
 }
-assert.equal(snapshot.get_chapter.body,'別世界の続きを読む。');assert.equal(snapshot.get_chapter.likes,1);
-assert.deepEqual(snapshot.get_branch_path.chapters.map(c=>c.id),[evidence.first,evidence.fork,evidence.nested]);
+assert.equal(snapshot.get_chapter.body,'入れ子の本文');assert.equal(snapshot.get_chapter.likes,1);
+assert.deepEqual(snapshot.get_branch_path.chapters.map(c=>c.id),[evidence.first,evidence.fork,evidence.nested,evidence.nestedFourth]);
 const rejected=await rpc(access,'tools/call',{name:'create_story',arguments:{title:'MCP cannot write'}});assert.ok(rejected.body.error || rejected.body.result?.isError);
 const target='deploy/.test/evidence/mcp.json';
 if(process.argv.includes('--compare')){const before=JSON.parse(readFileSync(target));for(const key of ['get_story','get_chapter','get_branch_path'])assert.deepEqual(snapshot[key],before[key]);console.log('PASS restart persistence: complete story, nested paths, body and votes match.');}

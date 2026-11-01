@@ -24,7 +24,7 @@ Dockerを利用できるGitHub Actionsでは、Keycloak・PostgreSQL・Nginx・�
 
 - 実際のChatGPT環境へのOAuth接続設定・登録・読書確認。
 - ChatGPT側の接続登録と本人ログイン・実会話からの呼び出し。MCPの認証自動発見と事前登録OAuthクライアントは実装・配置済み。DCRは採用しない。
-- 投稿済み本文の編集/削除UI、一般公開向けの登録機能。
+- 投稿済みの話の削除UI、一般公開向けの登録機能。
 
 公開用設定は [public-server.md](public-server.md) を参照してください。
 
@@ -55,3 +55,9 @@ Protected Resource Metadataと401の `WWW-Authenticate` / OAuth tool metadata、
 `openid offline_access` のinvalid_scopeを再現し、専用クライアントのoffline scope/role mapping不足を修正した。`novels:read` はdefault scopeとして同意後のトークンに含め、MCP側の必須権限検証を維持する。Keycloak offline refresh時にURL audienceが失われる挙動も確認し、独立した固定URL Audience mapperで更新後もURL audienceを保つ。ユーザー・作品・secret・callbackは維持。署名付きscope組み合わせテストを追加して自動テスト23件成功。
 
 外部実ブラウザで `openid offline_access` と3scopeの認可成功、offline token発行、4ツール、通常の即時更新と実時間の期限切れ後のoffline更新を確認した。更新後のJWTにもURL audienceを要求し、権限不足の拒否を維持。既存Webの回帰検証成功。検証アカウントとそのoffline grantは無効化し、変更後バックアップを取得済み。ChatGPT本体での認証は利用者の再試行待ち。
+
+## 目次・共同投稿・編集（2026-11-01）
+
+通常の縦目次、話ごとの制作者・更新日時、同じ親に属するbranch候補、第一話の別案・途中・入れ子と経路保持を実装。参加者の共同続話、本人限定のタイトル・本文編集、revision競合検出と下書き保持を追加。SQLite v3は既存データへの追加移行。MCPは既存4ツールのまま各話の制作者・更新日時・revisionと編集後本文を返す。
+
+利用者よりChatGPT本体からMCPの作品一覧取得成功の報告あり。今回のサーバー検証は独立したOAuthクライアントで行い、ChatGPTの会話操作を代理実行したものではない。
