@@ -216,3 +216,11 @@ python3 scripts/public-create-participant.py --username yui --display-name yui \
 Keycloak内部APIでnovel-branchesの同名ユーザーを先に確認する。既存なら公開可能な状態だけを表示して終了し、パスワード・プロフィール・ロールや既存ファイルを変更しない。新規ならランダムな初回パスワードを0700ディレクトリ配下の0600ファイルへ排他的に保存し、enabled/novel-member/UPDATE_PASSWORDで作成する。秘密値は引数・標準出力・Gitへ載せない。ファイルやアカウント作成途中の失敗時は、状態を確認してから再試行する。本人の初回ログインを代行しない。
 
 管理者が自分の端末で `ssh -t ubuntu@eletim.jp 'cat /home/ubuntu/.local/share/novel-onboarding/yui.initial-password'` を実行すると初回パスワードを確認できる。録画・ログ保存のない端末で確認し、本人へ別の安全な経路で連絡する。初回URLは `https://eletim.jp/novel/auth/login`。yuiで入り、本人がパスワード変更と要求された必須プロフィール入力を行う。変更確認後、`ssh ubuntu@eletim.jp 'rm -- /home/ubuntu/.local/share/novel-onboarding/yui.initial-password'` で一時ファイルを削除する。初回パスワードはチャットへ貼らない。
+
+公開結果: 自動テスト32件成功。公開実Chromiumで作品情報への導線、作者限定フォーム/他者API403、タイトル/あらすじ/表示設定/長い日本語メモ/改行/空欄の保存・再読込、409と503時の入力・下書き保持と復元、モバイル編集、選択branchへの目次復帰、各話Editorから作品設定が外れたことを確認した。従来の読書/分岐/投稿/編集/競合/ホーム検索・並べ替え・ページ送りも成功。全既存レコードは移行直後/検証後のDB比較で保持を確認した。OAuth/MCPのget_storyは保存した設定メモと作品revisionを返し、4ツール・署名/role/scope検証・refreshも成功。
+
+yuiは新規作成済み。表示名yui、有効、novel-member、UPDATE_PASSWORD、保存先 `/home/ubuntu/.local/share/novel-onboarding/yui.initial-password` が0600、親0700/所有者ubuntuを確認した。再実行は「既存アカウント保持」で終了し、パスワードをリセットしない。本人のログイン/初回変更は残している。初回パスワードファイルはGitや通常の公開バックアップ対象に含めていない。
+
+実時間のMCPアクセストークン期限後の拒否とrefreshによる復帰も成功した。今回は独立したOAuthブラウザクライアントで検証しており、ChatGPT本体の再接続操作、実スマートフォン端末、ローカルDocker全構成は未実施。yui本人の初回ログインとパスワード変更も代行していない。
+
+最終両DBバックアップ: `/home/ubuntu/novel-backups/20261101T045842Z`（2232980、最終結果の文書追記前）。v5の設定メモ・作品revision、yuiのKeycloakアカウント・初回変更必須状態、既存ユーザー・秘密値・対応コードを組で保存した。検証用3名は無効化/ログアウト/専用クライアントoffline grant取消済み。今回の検証作品15件はデフォルト非表示で保持し、既存作品や各話を削除していない。yuiは検証アカウントに含めず、有効のまま維持する。
