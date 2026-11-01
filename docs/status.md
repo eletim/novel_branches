@@ -47,3 +47,5 @@ ntfy 2.27.0は実機でサブパスを拒否したため、ユーザー承認に
 Protected Resource Metadataと401の `WWW-Authenticate` / OAuth tool metadata、RFC 8414の認可サーバーメタデータを追加。VPSのKeycloak 26.8.1でResource Indicatorsを有効化し、専用の `novel-chatgpt` confidentialクライアントを事前登録した。認可コード・PKCE S256・同意画面・通常refresh token、canonical resource/audience `https://eletim.jp/novel/mcp` を使用する。署名・issuer・期限・参加ロール・read scopeを維持し、4つの閲覧ツールのみ。管理・DCR経路は非公開。
 
 自動テスト22件成功。外部の実ブラウザを使ったOAuthクライアントでコード交換・issuer識別、initialize、4ツール、refresh、匿名/不正トークン/ロールなし/scopeなし/不正PKCE/コード再利用/不正resourceの拒否を確認。既存Webのログイン・閲覧・投稿・分岐・グッド等の回帰検証も成功。詳細は [mcp.md](mcp.md)。ChatGPT本体の登録画面はこの作業環境から操作できないため、**ChatGPTからの実接続は未確認**。登録・本人認証後の会話テストは利用者側で必要。
+
+実時間約5分待ってMCPアクセストークン期限後の本文取得401と、refresh tokenによる復帰も確認した。終了後は検証用3アカウントを無効化・ログアウトし、変更後の秘密値・認証設定を含む両DBバックアップを取得済み。

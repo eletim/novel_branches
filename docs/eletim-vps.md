@@ -125,3 +125,5 @@ Caddy設定の単一ファイルbind mountが旧inodeを参照し、最初のrel
 Caddyは `/novel/*` に加え、PRMのRFC 9728標準パスとissuerのRFC 8414メタデータだけを正確一致で公開する。DCR・Keycloak管理・master realmは非公開。Nginxのテンプレート変更後は `dc up -d --no-deps --force-recreate nginx` でファイルbind mountを再作成する。Caddyfileは事前validate後に `cat deploy/caddy/Caddyfile.eletim > /home/ubuntu/notify-server/Caddyfile` で現在のinodeを保って反映し、コンテナ内の内容を確認してreloadする。
 
 ChatGPT本体の接続登録はユーザー操作が必要。登録画面の正確なcallbackが設定済みstable URLと異なる場合のみ `python3 scripts/public-admin.py --configure-mcp --chatgpt-callback '画面のURL'` を実行し、そのURIだけを許可する。秘密値は画面入力に使い、チャットには貼らない。
+
+変更後の最終バックアップ: `/home/ubuntu/novel-backups/20261101T003013Z`（日本時間2026-11-01 09:30:13）。新しいChatGPTクライアントsecret・canonical audience設定・Keycloakの専用クライアントを両DBと組にして保存し、SHA256を確認した。外部MCP OAuthの実時間約5分の期限切れ401と、refreshによる本文閲覧権限の復帰を確認。検証用3アカウントは無効化・セッション失効し、Web回帰確認で追加した検証作品は記録として保持した。ChatGPT本体の接続は未確認で、登録・参加者の本人ログイン・会話からの4ツール呼び出しが残る。
