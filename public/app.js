@@ -1,11 +1,12 @@
+import {selectReading,candidatesFor,branchForCandidate} from './reading.mjs';
 const basePath = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
 const $ = s => document.querySelector(s);
 const app = $('#app'), dialog = $('#editor');
 let user, auth = {mode:'local'}, viewGeneration = 0, toastTimer;
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path,method='GET',data) {
+async function api(path,method='GET',data,expectedUserId=user?.id) {
   if(data && path!=='/login' && !user)throw Error('ログインしてください。下書きはこの画面に残っています。');
-  const res = await fetch(basePath+'/api'+path,{method,headers:data ? {'Content-Type':'application/json',...(user ? {'X-Novel-User':String(user.id)} : {})} : {},body:data ? JSON.stringify(data) : undefined});
+  const res = await fetch(basePath+'/api'+path,{method,headers:data ? {'Content-Type':'application/json',...(user ? {'X-Novel-User':String(expectedUserId)} : {})} : {},body:data ? JSON.stringify(data) : undefined});
   const result = await res.json();
   if(!res.ok) {if(res.status===401 && path!='/login') {user=null;nav();} throw Error(result.error || '通信できませんでした。');}
   return result;
@@ -30,41 +31,51 @@ async function library(params,generation) {
   const page = n=>{params.set('offset',n);location.hash='?'+params;};
   if($('#prev'))$('#prev').onclick=()=>page(Math.max(0,offset-12));if($('#next'))$('#next').onclick=()=>page(offset+12);
 }
-async function storyView(id,generation) {
-  const story=await api('/stories/'+id);
-  const paths=await Promise.all(story.branches.map(b=>api(`/branches/${b.id}/path`)));
+function updatedTime(chapter) {
+  const raw=chapter.updated_at||chapter.created_at,date=new Date(raw);
+  return `<time datetime="${esc(raw)}" title="${esc(date.toLocaleString('ja-JP'))}">${esc(date.toLocaleString('ja-JP',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}))}</time>`;
+}
+async function storyView(id,generation,params) {
+  const story=await api('/stories/'+id),{branch,path}=selectReading(story,params.get('branch'));
   if(generation!==viewGeneration)return;
-  const children = new Map();for(const c of story.chapters){const key=c.parent_id||0;if(!children.has(key))children.set(key,[]);children.get(key).push(c);}
-  // Iterative rendering keeps deeply branched stories from overflowing the call stack.
-  let tree='',stack=[{key:0,close:false}];while(stack.length){const item=stack.pop();if(item.close){tree+='</li></ul>';continue;}const list=children.get(item.key)||[];for(let i=list.length-1;i>=0;i--){stack.push({chapter:list[i]});}if(item.chapter){const c=item.chapter;tree+=`<ul class="tree"><li><a href="#chapter/${c.id}">${esc(c.title)} <small>♡ ${c.likes}</small></a><small>${esc(c.author)}</small>`;stack.push({close:true});stack.push({key:c.id});}}
-  app.innerHTML=`<a class="back" href="#">← 物語の一覧へ</a><div class="story-heading"><span class="eyebrow">A GROWING STORY</span><h1>${esc(story.title)}</h1><div class="meta">はじまりの作者：${esc(story.author)} · ${story.branches.length}つの展開</div><p class="summary">${esc(story.summary)}</p></div><div class="layout"><section><h2 class="section-title">読む世界を選ぶ</h2><div class="branch-list">${story.branches.map((b,i)=>`<article class="branch-item"><span class="tag">${b.fork_chapter_id?'PARALLEL WORLD':'ORIGINAL WORLD'}</span><h3>${esc(b.title)}</h3><div class="meta">${esc(b.author)} · ♡ ${b.likes}${b.fork_chapter_id?` · <a href="#chapter/${b.fork_chapter_id}">分岐元の話へ ↗</a>`:''}</div><ol>${paths[i].chapters.map(c=>`<li class="${c.branch_id!==b.id?'inherited':''}"><a href="#chapter/${c.id}?branch=${b.id}">${esc(c.title)}</a>${c.branch_id!==b.id?' <span class="tag">共通</span>':''}</li>`).join('')}</ol><div class="branch-actions"><a class="button small" href="#chapter/${paths[i].chapters[0].id}?branch=${b.id}">最初から読む →</a><a class="button secondary small" href="#chapter/${b.head_id}?branch=${b.id}">最新話へ</a>${b.author_id===user.id?`<button class="secondary small" data-append="${b.id}">続きを書く</button>`:''}</div></article>`).join('')}</div></section><aside class="panel"><h2>物語の分岐</h2><p class="hint">タイトルを選ぶと、その話を読めます。</p>${tree}<p class="hint">共通の話は同じ本文を参照します。<br>グッドは各話に付けられます。</p></aside></div>`;
-  document.querySelectorAll('[data-append]').forEach(button=>button.onclick=()=>editor('append',story.branches.find(b=>b.id===Number(button.dataset.append))));
+  const row=(c,index,href)=>`<span class="toc-number">第${index+1}話</span><a class="toc-title" href="${href}">${esc(c.title)}</a><span class="toc-author">${esc(c.author)}</span>${updatedTime(c)}`;
+  app.innerHTML=`<section class="story-toc"><a class="back" href="#">← 作品一覧へ</a><h1>${esc(story.title)}</h1><p class="meta story-creator">最初の制作者：${esc(story.author)}</p><p class="summary story-summary">${esc(story.summary)}</p><h2 class="sr-only">目次</h2><ol class="toc-list">${path.map((c,i)=>{
+    const candidates=candidatesFor(story,c);
+    return `<li class="toc-item" data-chapter="${c.id}"><div class="toc-row">${row(c,i,`#chapter/${c.id}?branch=${branch.id}`)}${candidates.length>1?`<button class="secondary small branch-toggle" aria-expanded="false" aria-controls="candidates-${c.id}">branch - ${candidates.length}</button>`:'<span></span>'}</div><div class="toc-candidates" id="candidates-${c.id}" hidden>${candidates.map(candidate=>`<div class="toc-candidate ${candidate.id===c.id?'selected':''}" data-candidate="${candidate.id}">${row(candidate,i,`#story/${story.id}?branch=${branchForCandidate(story,candidate,branch.id)}`)}${candidate.id===c.id?'<span class="meta">選択中</span>':''}</div>`).join('')}</div><button class="toc-alternate" data-alternate="${c.id}">第${i+1}話の別案を書く</button></li>`;
+  }).join('')}</ol><div class="toc-actions"><button id="append-story">続話を追加する</button></div></section>`;
+  document.querySelectorAll('.branch-toggle').forEach(button=>button.onclick=()=>{const open=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!open));document.getElementById(button.getAttribute('aria-controls')).hidden=open;});
+  document.querySelectorAll('[data-alternate]').forEach(button=>button.onclick=()=>editor('alternate',story.chapters.find(c=>c.id===Number(button.dataset.alternate)),branch.id));
+  $('#append-story').onclick=()=>editor('append',branch,branch.id);
 }
 async function chapterView(id,generation,params) {
-  const c=await api('/chapters/'+id), story=await api('/stories/'+c.story_id), branch=story.branches.find(b=>b.id===c.branch_id);
-  const selected=story.branches.find(b=>b.id===Number(params.get('branch')));
-  const path=selected ? (await api(`/branches/${selected.id}/path`)).chapters : [];
-  const index=path.findIndex(ch=>ch.id===c.id), reading=index>=0 ? selected : null;
-  const suffix=reading ? `?branch=${reading.id}` : '';
-  const next=reading ? path[index+1] : null;
+  const c=await api('/chapters/'+id),story=await api('/stories/'+c.story_id);
+  const {branch,path}=selectReading(story,params.get('branch'),c.id),index=path.findIndex(ch=>ch.id===c.id);
+  const previous=path[index-1],next=path[index+1],suffix=`?branch=${branch.id}`;
   if(generation!==viewGeneration)return;
-  app.innerHTML=`<div class="reader-shell"><a class="back" href="#story/${c.story_id}">← ${esc(story.title)} · 展開を選ぶ</a><div class="reader-heading"><span class="eyebrow">${esc(reading?.title || c.branch_title)}${reading && reading.id!==c.branch_id?" · 共通部分":""}</span><h1>${esc(c.title)}</h1><div class="meta">${esc(c.author)} · ${new Date(c.created_at).toLocaleDateString('ja-JP')}</div></div><article class="reader-body">${esc(c.body)}</article><div class="reader-actions"><button id="like" class="${c.liked?'liked':'secondary'}" aria-pressed="${!!c.liked}">${c.liked?'♥':'♡'} グッド ${c.likes}</button><button id="fork" class="secondary">⑂ ここから別の続きを書く</button>${branch.author_id===user.id && branch.head_id===c.id?'<button id="append">続きを書く →</button>':''}</div><p class="hint">「ここから別の続きを書く」は、この話までを共通にして次の話を投稿します。</p>${next?`<a class="button" href="#chapter/${next.id}${suffix}">選んだ展開の次の話 → ${esc(next.title)}</a>`:""}<section class="continuations"><h2 class="section-title">この先の物語</h2>${c.children.map(next=>`<a href="#chapter/${next.id}"><span class="tag">${next.branch_id===c.branch_id?'この世界の続き':'別の世界へ分岐'}</span><h3>${esc(next.title)} →</h3><span class="meta">${esc(next.branch_title)} · ${esc(next.author)}</span></a>`).join('') || '<p class="hint">この先は、まだ書かれていません。</p>'}</section>${c.parent_id?`<a class="back" href="#chapter/${c.parent_id}${suffix}">← 前の話へ</a>`:''}</div>`;
-  $('#fork').onclick=()=>editor('fork',c);if($('#append'))$('#append').onclick=()=>editor('append',branch);
+  app.innerHTML=`<div class="reader-shell"><a class="back to-toc" href="#story/${c.story_id}${suffix}">← ${esc(story.title)} · 目次</a><div class="reader-heading"><span class="eyebrow">第${index+1}話</span><h1>${esc(c.title)}</h1><div class="meta chapter-creator">制作者：${esc(c.author)} · 最終更新 ${updatedTime(c)}</div></div><article class="reader-body">${esc(c.body)}</article><div class="reader-actions"><button id="like" class="${c.liked?'liked':'secondary'}" aria-pressed="${!!c.liked}">${c.liked?'♥':'♡'} グッド ${c.likes}</button>${c.author_id===user.id?'<button id="edit-chapter" class="secondary">この話を編集</button>':''}<button id="alternate" class="secondary">この話の別案を書く</button><button id="fork" class="secondary">ここから分岐を書く</button>${branch.head_id===c.id?'<button id="append">続話を追加する</button>':''}</div><nav class="chapter-nav" aria-label="話の前後移動">${previous?`<a class="previous-chapter" href="#chapter/${previous.id}${suffix}">← 前の話：${esc(previous.title)}</a>`:'<span></span>'}${next?`<a class="next-chapter" href="#chapter/${next.id}${suffix}">次の話：${esc(next.title)} →</a>`:'<span></span>'}</nav><p class="hint">共通の話の編集は、その話を参照するすべての経路に反映されます。</p></div>`;
+  $('#fork').onclick=()=>editor('fork',c,branch.id);$('#alternate').onclick=()=>editor('alternate',c,branch.id);
+  if($('#append'))$('#append').onclick=()=>editor('append',branch,branch.id);
+  if($('#edit-chapter'))$('#edit-chapter').onclick=()=>editor('edit',c,branch.id);
   $('#like').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const updated=await api(`/chapters/${c.id}/like`,'PUT',{liked:!c.liked});c.liked=updated.liked;button.textContent=`${c.liked?'♥':'♡'} グッド ${updated.likes}`;button.className=c.liked?'liked':'secondary';button.setAttribute('aria-pressed',!!c.liked);}catch(err){toast(err.message);}finally{button.disabled=false;}};
 }
-function editor(mode,context={}) {
-  const draftKey=`novel-branches:draft:${user.id}:${mode}:${context.id||0}`;
+function editor(mode,context={},readingBranch=0) {
+  const editingUserId=user.id,draftKey=`novel-branches:draft:${editingUserId}:${mode}:${context.id||0}`;
   let draft={};try{draft=JSON.parse(localStorage.getItem(draftKey)||'{}');}catch{}
   const field=(name,label,max,value='',textarea=false)=>`<label for="edit-${name}">${label}</label>${textarea?`<textarea class="${name==='summary'?'short':''}" id="edit-${name}" name="${name}" maxlength="${max}" ${name==='summary'?'':'required'}>${esc(draft[name]??value)}</textarea>`:`<input id="edit-${name}" name="${name}" maxlength="${max}" value="${esc(draft[name]??value)}" required>`}`;
-  dialog.innerHTML=`<div class="dialog-head"><div><span class="eyebrow">WRITE YOUR WORLD</span><h2>${mode==='new'?'新しい物語をはじめる':mode==='fork'?'別の続きを書く':'続きを書く'}</h2></div><button class="secondary small" id="close-editor" aria-label="閉じる">✕</button></div><p class="hint">${mode==='fork'?`「${esc(context.title)}」の読了後から分岐します。`:mode==='append'?`「${esc(context.title)}」の最新話に続きます。`:'作品の紹介と、最初の一話を投稿します。'}</p><form id="edit-form">${mode==='new'?field('title','作品名',120)+field('summary','あらすじ（任意）',2000,'',true):''}${mode==='fork'?field('branchTitle','分岐名',120):''}${field(mode==='new'?'chapterTitle':'title','話のタイトル',120)}${field('body','本文',100000,'',true)}<div class="form-actions"><span class="hint" id="draft-status">下書きはこのブラウザに自動保存</span><button type="submit">この話を投稿する →</button></div><p class="hint">投稿した話は、この初期版では編集できません。</p><p class="error" role="alert"></p></form>`;
-  const form=$('#edit-form');
-  $('#close-editor').onclick=()=>dialog.close();
-  const saveDraft=()=>{try{localStorage.setItem(draftKey,JSON.stringify(Object.fromEntries(new FormData(form))));$('#draft-status').textContent='下書き保存済み（このブラウザ）';}catch{$('#draft-status').textContent='下書きを保存できません。投稿前に本文を控えてください。';}};
+  const heading={new:'新しい作品を書く',fork:'この話の続きから分岐を書く',alternate:'この話の別案を書く',append:'続話を追加する',edit:'この話を編集する'}[mode];
+  dialog.innerHTML=`<div class="dialog-head"><h2>${heading}</h2><button class="secondary small" id="close-editor" aria-label="閉じる">✕</button></div><p class="hint">${mode==='edit'?'制作者と話のつながりは変更されません。共通の話を参照する経路にも編集が反映されます。':mode==='alternate'?'直前までの話を共通にして、同じ話数の別案を投稿します。':mode==='fork'?'この話までを共通にして、次の話を別の経路として投稿します。':mode==='append'?'選んだ経路の最新話に続話を追加します。':'作品と最初の一話を投稿します。'}</p><form id="edit-form">${mode==='new'?field('title','作品名',120)+field('summary','あらすじ（任意）',2000,'',true):''}${field(mode==='new'?'chapterTitle':'title','話のタイトル',120,mode==='edit'?context.title:'')}${field('body','本文',100000,mode==='edit'?context.body:'',true)}${mode==='edit'?`<input type="hidden" name="expectedRevision" value="${esc(draft.expectedRevision??context.revision)}">`:mode==='append'?`<input type="hidden" name="expectedHeadId" value="${esc(draft.expectedHeadId??context.head_id)}">`:''}<div class="form-actions"><span class="hint" id="draft-status">下書きはこのブラウザに自動保存</span><button type="submit">${mode==='edit'?'編集を保存する':'この話を投稿する'}</button></div>${['edit','append'].includes(mode)?'<button type="button" class="secondary small" id="reload-edit">下書きを破棄して最新の内容を読み直す</button>':''}<p class="error" role="alert"></p></form>`;
+  const form=$('#edit-form');$('#close-editor').onclick=()=>dialog.close();
+  const saveDraft=()=>{try{localStorage.setItem(draftKey,JSON.stringify(Object.fromEntries(new FormData(form))));$('#draft-status').textContent='下書き保存済み（このブラウザ）';}catch{$('#draft-status').textContent='下書きを保存できません。送信前に本文を控えてください。';}};
   form.oninput=saveDraft;
-  form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;form.querySelector('.error').textContent='';try{const input=Object.fromEntries(new FormData(form));const path=mode==='new'?'/stories':mode==='fork'?`/chapters/${context.id}/fork`:`/branches/${context.id}/chapters`;if(mode==='append')input.expectedHeadId=context.head_id;const created=await api(path,'POST',input);try{localStorage.removeItem(draftKey);}catch{}dialog.close();toast('投稿しました。物語の世界が広がりました。');location.hash='chapter/'+created.chapterId;}catch(err){form.querySelector('.error').textContent=err.message;
-    if(!user && auth.mode==='oidc'){
-      const link=document.createElement('a');link.href=basePath+'/auth/login';link.className='button';link.textContent='再ログイン（本文を控えてから進んでください）';form.querySelector('.error').append(document.createElement('br'),link);
-    }
+  if($('#reload-edit'))$('#reload-edit').onclick=async()=>{if(!confirm('入力中の下書きを破棄し、最新の内容を読み直しますか？'))return;try{const fresh=mode==='edit'?await api('/chapters/'+context.id):(await api('/stories/'+context.story_id)).branches.find(b=>b.id===context.id);localStorage.removeItem(draftKey);dialog.close();editor(mode,fresh,readingBranch);}catch(e){form.querySelector('.error').textContent=e.message;}};
+  form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;form.querySelector('.error').textContent='';saveDraft();try{
+    const input=Object.fromEntries(new FormData(form));let path,method='POST';
+    if(mode==='new')path='/stories';else if(mode==='edit'){path='/chapters/'+context.id;method='PATCH';input.expectedRevision=Number(input.expectedRevision);}else if(mode==='append'){path=`/branches/${context.id}/chapters`;input.expectedHeadId=Number(input.expectedHeadId);}else path=`/chapters/${context.id}/${mode}`;
+    const created=await api(path,method,input,editingUserId);try{localStorage.removeItem(draftKey);}catch{}dialog.close();toast(mode==='edit'?'編集を保存しました。':'投稿しました。');
+    const hash=`#chapter/${created.chapterId||context.id}?branch=${created.branchId||readingBranch||context.branch_id}`;
+    if(location.hash===hash)await render();else location.hash=hash;
+  }catch(err){form.querySelector('.error').textContent=err.message;
+    if(!user&&auth.mode==='oidc'){const link=document.createElement('a');link.href=basePath+'/auth/login';link.className='button';link.textContent='再ログイン（本文を控えてから進んでください）';form.querySelector('.error').append(document.createElement('br'),link);}
   }finally{button.disabled=false;}};
   dialog.showModal();
 }
@@ -73,7 +84,7 @@ async function render() {
   if(!user){login();return;}
   app.innerHTML='<p class="hint">物語を読み込み中…</p>';
   const hash=location.hash.slice(1), [route,query]=hash.split('?'), params=new URLSearchParams(query||'');
-  try{if(route.startsWith('story/'))await storyView(Number(route.split('/')[1]),generation);else if(route.startsWith('chapter/'))await chapterView(Number(route.split('/')[1]),generation,params);else await library(params,generation);}catch(e){if(generation===viewGeneration){if(!user)login();else app.innerHTML=`<div class="empty"><h3>読み込めませんでした</h3><p>${esc(e.message)}</p><a class="button secondary" href="#">一覧へ戻る</a></div>`;}}window.scrollTo(0,0);
+  try{if(route.startsWith('story/'))await storyView(Number(route.split('/')[1]),generation,params);else if(route.startsWith('chapter/'))await chapterView(Number(route.split('/')[1]),generation,params);else await library(params,generation);}catch(e){if(generation===viewGeneration){if(!user)login();else app.innerHTML=`<div class="empty"><h3>読み込めませんでした</h3><p>${esc(e.message)}</p><a class="button secondary" href="#">一覧へ戻る</a></div>`;}}window.scrollTo(0,0);
 }
 window.addEventListener('hashchange',render);
 try{const me=await api('/me');user=me.user;auth=me.auth||auth;nav();await render();}catch(e){app.innerHTML=`<p role="alert">${esc(e.message)} 再読み込みしてください。</p>`;}

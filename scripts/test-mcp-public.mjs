@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {randomBytes,createHash} from 'node:crypto';
 import {chromium} from 'playwright';
+import {existsSync,readFileSync} from 'node:fs';
 process.loadEnvFile('deploy/.test/public.env');process.loadEnvFile('deploy/.test/chatgpt.env');
 const origin=process.env.APP_ORIGIN,resource=origin+process.env.APP_BASE_PATH+'/mcp',callback=process.env.MCP_CALLBACK;
 assert.equal(resource,'https://eletim.jp/novel/mcp');
@@ -68,6 +69,16 @@ try {
  const story=await call('get_story',{storyId:stories.stories[0].id});
  const chapter=await call('get_chapter',{chapterId:story.chapters[0].id});assert.ok(chapter.body);
  const branch=story.branches.find(b=>b.fork_chapter_id)||story.branches[0];const path=await call('get_branch_path',{branchId:branch.id});assert.ok(path.chapters.length);assert.equal(path.chapters.at(-1).id,branch.head_id);
+ const evidence='deploy/.test/evidence/episodes-public/episodes.json';
+ if(existsSync(evidence)){
+  const proof=JSON.parse(readFileSync(evidence,'utf8'));
+  const shared=await call('get_chapter',{chapterId:proof.first});assert.equal(shared.body,'先に保存された共通本文');assert.equal(shared.author,'Test member');assert.equal(shared.updated_at,proof.updatedAt);assert.equal(shared.revision,3);
+  const contributed=await call('get_chapter',{chapterId:proof.second});assert.equal(contributed.author,'Test other');assert.ok(contributed.updated_at);
+  const editedStory=await call('get_story',{storyId:proof.story});assert.equal(editedStory.chapters.find(c=>c.id===proof.second).author,'Test other');
+  const nestedBranch=editedStory.branches.find(b=>b.head_id===proof.nestedFourth);
+  const editedPath=await call('get_branch_path',{branchId:nestedBranch.id});assert.deepEqual(editedPath.chapters.map(c=>c.id),[proof.first,proof.fork,proof.nested,proof.nestedFourth]);assert.equal(editedPath.chapters[0].updated_at,proof.updatedAt);assert.equal(editedPath.chapters[1].author,'Test member');
+  console.log('PASS MCP episode regression: edited body/revision/update time, per-episode creators and nested reading order match browser');
+ }
  const write=await rpc(login.data.access_token,'tools/call',{name:'create_story',arguments:{}});assert.equal(write.data.error.code,-32602);
  console.log('PASS public MCP: code + S256 + issuer identification, initialize, four read tools, no write tool');
  stage='refresh';const refreshed=await token({grant_type:'refresh_token',refresh_token:login.data.refresh_token,resource});assert.equal(refreshed.status,200,refreshed.data.error);const refreshClaims=JSON.parse(Buffer.from(refreshed.data.access_token.split('.')[1],'base64url'));assert.ok([refreshClaims.aud].flat().includes(resource));assert.ok([refreshClaims.aud].flat().every(a=>[resource,'novel-mcp'].includes(a)));assert.equal((await rpc(refreshed.data.access_token,'tools/list')).status,200);

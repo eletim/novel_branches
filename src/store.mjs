@@ -38,13 +38,23 @@ export class Store {
       CREATE INDEX IF NOT EXISTS likes_chapter ON likes(chapter_id);
       CREATE TABLE IF NOT EXISTS oidc_identities(issuer TEXT NOT NULL,subject TEXT NOT NULL,user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),PRIMARY KEY(issuer,subject));
       CREATE TABLE IF NOT EXISTS oidc_logins(state_hash TEXT PRIMARY KEY,browser_hash TEXT NOT NULL,nonce TEXT NOT NULL,verifier TEXT NOT NULL,expires INTEGER NOT NULL);
-      PRAGMA user_version=2;`);
+      `);
     // Additive migration preserves existing users, stories, sessions and ownership.
     const columns = new Set(this.db.prepare('PRAGMA table_info(sessions)').all().map(c=>c.name));
     for (const [name, type] of Object.entries({auth_type:"TEXT NOT NULL DEFAULT 'local'",issuer:'TEXT',subject:'TEXT',sid:'TEXT',id_token:'TEXT'})) {
       if (!columns.has(name)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${type}`);
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS oidc_sessions ON sessions(issuer,sid,subject)');
+    this.transaction(()=>{
+      const episodeColumns=new Set(this.db.prepare('PRAGMA table_info(chapters)').all().map(c=>c.name));
+      for(const [name,type] of Object.entries({author_id:'INTEGER REFERENCES users(id)',updated_at:'TEXT',revision:'INTEGER NOT NULL DEFAULT 1'})) {
+        if(!episodeColumns.has(name))this.db.exec(`ALTER TABLE chapters ADD COLUMN ${name} ${type}`);
+      }
+      // Old versions restricted each branch to its author; preserve that attribution.
+      this.db.exec(`UPDATE chapters SET author_id=(SELECT author_id FROM branches WHERE branches.id=chapters.branch_id) WHERE author_id IS NULL;
+        UPDATE chapters SET updated_at=created_at WHERE updated_at IS NULL;
+        PRAGMA user_version=3;`);
+    });
   }
   close() { this.db.close(); }
   transaction(fn) {
@@ -129,23 +139,25 @@ export class Store {
     const s = this.db.prepare('SELECT s.*,u.display_name author FROM stories s JOIN users u ON u.id=s.author_id WHERE s.id=?').get(id);
     if (!s) throw new AppError('作品が見つかりません。',404);
     s.branches = this.db.prepare(`SELECT b.*,u.display_name author,(SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id WHERE c.branch_id=b.id) likes FROM branches b JOIN users u ON u.id=b.author_id WHERE b.story_id=? ORDER BY b.id`).all(id);
-    s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,c.created_at,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=b.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
+    s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,c.created_at,c.updated_at,c.revision,c.author_id,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
     return s;
   }
   chapter(id, viewer = 0) {
-    const c = this.db.prepare(`SELECT c.*,b.story_id,b.title branch_title,b.author_id,u.display_name author,(SELECT COUNT(*) FROM likes WHERE chapter_id=c.id) likes,EXISTS(SELECT 1 FROM likes WHERE chapter_id=c.id AND user_id=?) liked FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=b.author_id WHERE c.id=?`).get(viewer, id);
+    const c = this.db.prepare(`SELECT c.*,b.story_id,b.title branch_title,u.display_name author,(SELECT COUNT(*) FROM likes WHERE chapter_id=c.id) likes,EXISTS(SELECT 1 FROM likes WHERE chapter_id=c.id AND user_id=?) liked FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.id=?`).get(viewer, id);
     if (!c) throw new AppError('話が見つかりません。',404);
-    c.children = this.db.prepare('SELECT c.id,c.title,c.branch_id,b.title branch_title,u.display_name author FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=b.author_id WHERE c.parent_id=? ORDER BY c.id').all(id);
+    c.children = this.db.prepare('SELECT c.id,c.title,c.branch_id,c.parent_id,c.author_id,c.updated_at,c.revision,b.title branch_title,u.display_name author FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.parent_id=? ORDER BY c.id').all(id);
     return c;
   }
   path(branchId) {
     const branch = this.db.prepare('SELECT * FROM branches WHERE id=?').get(branchId);
     if (!branch) throw new AppError('分岐が見つかりません。',404);
-    return this.db.prepare(`WITH RECURSIVE path(id,parent_id,title,branch_id,depth) AS (
-      SELECT id,parent_id,title,branch_id,0 FROM chapters WHERE id=?
-      UNION ALL SELECT c.id,c.parent_id,c.title,c.branch_id,p.depth+1 FROM chapters c JOIN path p ON c.id=p.parent_id
-      ) SELECT id,parent_id,title,branch_id FROM path ORDER BY depth DESC`).all(branch.head_id);
+    return this.db.prepare(`WITH RECURSIVE path(id,parent_id,depth) AS (
+      SELECT id,parent_id,0 FROM chapters WHERE id=?
+      UNION ALL SELECT c.id,c.parent_id,p.depth+1 FROM chapters c JOIN path p ON c.id=p.parent_id
+      ) SELECT c.id,c.parent_id,c.title,c.branch_id,c.author_id,c.created_at,c.updated_at,c.revision,u.display_name author
+      FROM path p JOIN chapters c ON c.id=p.id JOIN users u ON u.id=c.author_id ORDER BY p.depth DESC`).all(branch.head_id);
   }
+
   createStory(userId, input) {
     const title = text(input.title, '作品名', 120), summary = text(input.summary || '', 'あらすじ', 2000, 0);
     const chapterTitle = text(input.chapterTitle, '話のタイトル', 120), body = text(input.body, '本文', 100000);
@@ -154,12 +166,12 @@ export class Store {
       const storyId = Number(s.lastInsertRowid);
       const b = this.db.prepare('INSERT INTO branches(story_id,title,author_id) VALUES(?,?,?)').run(storyId, '本編',userId);
       const branchId = Number(b.lastInsertRowid);
-      const chapterId = this.insertChapter(branchId,null,chapterTitle,body);
+      const chapterId = this.insertChapter(branchId,null,chapterTitle,body,userId);
       return { storyId,branchId,chapterId };
     });
   }
-  insertChapter(branchId, parent, title, body) {
-    const id = Number(this.db.prepare('INSERT INTO chapters(branch_id,parent_id,title,body) VALUES(?,?,?,?)').run(branchId,parent,title,body).lastInsertRowid);
+  insertChapter(branchId, parent, title, body, userId) {
+    const id = Number(this.db.prepare('INSERT INTO chapters(branch_id,parent_id,title,body,author_id,updated_at) VALUES(?,?,?,?,?,strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))').run(branchId,parent,title,body,userId).lastInsertRowid);
     this.db.prepare('UPDATE branches SET head_id=? WHERE id=?').run(id, branchId);
     return id;
   }
@@ -168,17 +180,37 @@ export class Store {
     return this.transaction(() => {
       const branch = this.db.prepare('SELECT * FROM branches WHERE id=?').get(branchId);
       if (!branch) throw new AppError('分岐が見つかりません。',404);
-      if (branch.author_id !== userId) throw new AppError('この続きは作者が投稿できます。別の展開は分岐から投稿してください。',403);
       if (input.expectedHeadId !== branch.head_id) throw new AppError('別の話が追加されています。再読み込みして確認してください。',409);
-      return { storyId: branch.story_id, branchId, chapterId: this.insertChapter(branchId,branch.head_id,title,body) };
+      return { storyId: branch.story_id, branchId, chapterId: this.insertChapter(branchId,branch.head_id,title,body,userId) };
     });
   }
   fork(userId, chapterId, input) {
-    const branchTitle = text(input.branchTitle, '分岐名',120), title = text(input.title,'話のタイトル',120), body = text(input.body,'本文',100000);
+    const branchTitle = text(input.branchTitle || ('分岐：'+String(input.title||'')).slice(0,120), '分岐名',120), title = text(input.title,'話のタイトル',120), body = text(input.body,'本文',100000);
     return this.transaction(() => {
       const source = this.chapter(chapterId);
       const branchId = Number(this.db.prepare('INSERT INTO branches(story_id,title,author_id,fork_chapter_id) VALUES(?,?,?,?)').run(source.story_id,branchTitle,userId,chapterId).lastInsertRowid);
-      return { storyId: source.story_id, branchId, chapterId: this.insertChapter(branchId,chapterId,title,body) };
+      return { storyId: source.story_id, branchId, chapterId: this.insertChapter(branchId,chapterId,title,body,userId) };
+    });
+  }
+  alternate(userId, chapterId, input) {
+    const title=text(input.title,'話のタイトル',120),body=text(input.body,'本文',100000);
+    return this.transaction(()=>{
+      const source=this.chapter(chapterId);
+      const branchId=Number(this.db.prepare('INSERT INTO branches(story_id,title,author_id,fork_chapter_id) VALUES(?,?,?,?)').run(source.story_id,('別案：'+title).slice(0,120),userId,source.parent_id).lastInsertRowid);
+      return {storyId:source.story_id,branchId,chapterId:this.insertChapter(branchId,source.parent_id,title,body,userId)};
+    });
+  }
+  edit(userId, chapterId, input) {
+    return this.transaction(()=>{
+      const chapter=this.chapter(chapterId);
+      if(chapter.author_id!==userId)throw new AppError('この話を編集できるのは制作者だけです。',403);
+      if(Object.keys(input).some(k=>!['title','body','expectedRevision'].includes(k)))throw new AppError('タイトル・本文以外は変更できません。');
+      if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<1)throw new AppError('編集元の版を指定してください。');
+      if(input.expectedRevision!==chapter.revision)throw new AppError('別の編集が保存されています。本文を控え、最新の内容を確認してください。',409);
+      const title=text(input.title,'話のタイトル',120),body=text(input.body,'本文',100000);
+      const updatedAt=new Date(Math.max(Date.now(),Date.parse(chapter.updated_at)+1)).toISOString();
+      this.db.prepare('UPDATE chapters SET title=?,body=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?').run(title,body,updatedAt,chapterId,input.expectedRevision);
+      return this.chapter(chapterId,userId);
     });
   }
   like(userId, chapterId, liked) {

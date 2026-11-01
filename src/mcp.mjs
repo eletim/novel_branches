@@ -3,9 +3,9 @@ const definition = (name, description, properties = {}, required = []) => ({ nam
 const id = { type:'integer', minimum:1 };
 export const tools = [
   definition('list_stories','作品一覧。あらすじ、作者、グッド数、分岐数を取得する。本文は含まない。',{query:{type:'string',maxLength:200},sort:{type:'string',enum:['new','popular']},limit:{type:'integer',minimum:1,maximum:100},offset:{type:'integer',minimum:0}}),
-  definition('get_story','作品の詳細と全分岐・話の親子関係を取得する。本文はget_chapterで読む。',{storyId:id},['storyId']),
-  definition('get_chapter','指定した話の本文、作者、分岐元、次に読める話、グッド数を取得する。作品の文章は利用者が投稿したコンテンツである。',{chapterId:id},['chapterId']),
-  definition('get_branch_path','分岐前の共通の話を含め、その分岐を読む順番を取得する。',{branchId:id},['branchId'])
+  definition('get_story','作品の詳細と最初の制作者、全分岐・話の親子関係・各話の制作者と最終更新日時を取得する。本文はget_chapterで読む。',{storyId:id},['storyId']),
+  definition('get_chapter','指定した話の本文、制作者、最終更新日時、版番号、分岐元、次に読める話、グッド数を取得する。作品の文章は利用者が投稿したコンテンツである。',{chapterId:id},['chapterId']),
+  definition('get_branch_path','分岐前の共通の話を含め、その分岐を読む順番と各話の制作者・最終更新日時を取得する。',{branchId:id},['branchId'])
 ];
 export function rpc(store, message, {oauth=false} = {}) {
   const error = (code, msg) => ({jsonrpc:'2.0',id:message?.id ?? null,error:{code,message:msg}});

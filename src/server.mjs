@@ -7,7 +7,7 @@ import { Store, AppError } from './store.mjs';
 import { rpc } from './mcp.mjs';
 import { authSettings, OidcAuth, cookie, sessionCookie, appBasePath } from './auth.mjs';
 
-const staticFiles = {'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+const staticFiles = {'/':['index.html','text/html; charset=utf-8'],'/reading.mjs':['reading.mjs','text/javascript; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 function equal(a,b) { return typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a),Buffer.from(b)); }
 async function rawBody(req, limit = 512000) {
   let size = 0, chunks = [];
@@ -125,11 +125,13 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
         }
         if (url.pathname === '/api/stories' && req.method === 'GET') return send(200,{stories:store.listStories({query:url.searchParams.get('q') || '',sort:url.searchParams.get('sort') || 'new',limit:Number(url.searchParams.get('limit') || 50),offset:Number(url.searchParams.get('offset') || 0)})});
         if (url.pathname === '/api/stories' && req.method === 'POST') return send(201,store.createStory(user.id,await body(req)));
-        const match = url.pathname.match(/^\/api\/(stories|chapters|branches)\/([1-9]\d*)(?:\/(fork|like|chapters|path))?$/);
+        const match = url.pathname.match(/^\/api\/(stories|chapters|branches)\/([1-9]\d*)(?:\/(fork|alternate|like|chapters|path))?$/);
         if (match) {
           const [,kind,rawId,action] = match, id = Number(rawId);
           if (!Number.isSafeInteger(id)) throw new AppError('IDが不正です。');
           if (req.method === 'GET' && !action && kind === 'stories') return send(200,store.story(id));
+          if (req.method === 'PATCH' && !action && kind === 'chapters') return send(200,store.edit(user.id,id,await body(req)));
+          if (req.method === 'POST' && kind === 'chapters' && action === 'alternate') return send(201,store.alternate(user.id,id,await body(req)));
           if (req.method === 'GET' && !action && kind === 'chapters') return send(200,store.chapter(id,user.id));
           if (req.method === 'GET' && kind === 'branches' && action === 'path') return send(200,{chapters:store.path(id)});
           if (req.method === 'POST' && kind === 'chapters' && action === 'fork') return send(201,store.fork(user.id,id,await body(req)));

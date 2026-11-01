@@ -57,7 +57,7 @@ const post=await alice.api('/stories','POST',{title:'実スタックの物語',s
 const fork=await bob.api(`/chapters/${root.chapterId}/fork`,'POST',{branchTitle:'別世界',title:'別の続き',body:'Bobの本文'});assert.equal(fork.status,201);const branch=await fork.json();
 assert.equal((await alice.api(`/chapters/${branch.chapterId}/like`,'PUT',{liked:true})).status,200);
 assert.equal((await (await bob.api(`/chapters/${branch.chapterId}`)).json()).likes,1);
-assert.equal((await bob.api(`/branches/${root.branchId}/chapters`,'POST',{title:'他人の話',body:'拒否',expectedHeadId:root.chapterId})).status,403);
+assert.equal((await bob.api(`/branches/${root.branchId}/chapters`,'POST',{title:'他の制作者の続話',body:'追加',expectedHeadId:root.chapterId})).status,201);
 assert.equal((await alice.fetch('/api/logout',{method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json','X-Forwarded-Host':'localhost'},body:'{}'})).status,403);
 console.log('PASS: two real Keycloak users can post, fork, read and like through Nginx');
 const outsider=new BrowserSession();assert.equal((await outsider.login('test-outsider',process.env.TEST_OUTSIDER_PASSWORD)).status,403);assert.equal((await outsider.api('/stories')).status,401);
