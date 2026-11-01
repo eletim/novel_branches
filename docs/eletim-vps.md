@@ -279,3 +279,15 @@ Aaの開閉はEnter/Space、閉じるボタン、Escapeで操作でき、閉じ�
 本文のPC/375pxとAaを開いたPC/375pxの固定画像は `/home/koji/novel-ui-screenshots/20261101-reader-settings/reader-{wide,settings}-{desktop,mobile}.png`。本人アカウントを使わず専用検証ユーザー/作品で撮影した。参照先ハーメルンの実ブラウザ表示（Cloudflare確認画面）、実機スマートフォン、ChatGPT本体の再接続とローカルDocker全構成は未実施。公開Chromiumと独立OAuthクライアントで検証する。
 
 最終確認: 公開MCPの実時間期限切れ401とrefresh後の復帰も成功。最終両DBバックアップは `/home/ubuntu/novel-backups/20261101T110056Z`（dbae56f、最終結果追記前）。既存のユーザー・秘密値・volume・管理者割当を保持し、検証用3名を無効化・ログアウト・専用MCP offline grant取消した。koji/yuiのパスワードやプロフィールは変更していない。
+
+## セグメント型ビューアー設定（2026-11-01）
+
+変更前バックアップ: `/home/ubuntu/novel-backups/20261101T125733Z`（afbfd75）。DB移行・Keycloak変更はなく、既存の本文幅・読書経路・管理権限・秘密値・volumeを維持する。
+
+Aaの見出しを「ビューアー設定」とし、文字サイズ→背景色→フォントの縦積みで表示する。サイズは小16/中18/大24/特大28pxの4等分、背景は白/黒/生成り/水色の4等分、フォントは明朝/ゴシック/メイリオの3等分。隙間なしの薄い境界線と選択中の3px内枠で示す。サイズラベルは実際に異なるサイズ、背景は色見本、フォントラベルも対応フォントで表示する。水色は#edf7ffで文字・リンク・補助文字・フォーム/操作も読みやすい組にする。
+
+保存キーは旧 `novel-branches:reader-settings:v1` を維持する。旧font/themeと16/18/24/28pxは引き継ぎ、廃止した20pxは「大」24pxへ移行する。初期値は従来どおりゴシック/生成り/18px。選択時に即時反映・ブラウザ保存し、次話/再読込/初期化を維持する。各欄はradiogroupとradio/aria-checked、選択肢1個だけtabindex=0。Tabで欄を移動、矢印/Home/Endで選択、Enter/Spaceで決定、Escapeで閉じる。音声対応はブラウザのアクセシビリティツリー上のラジオ名/checkedで検証する。
+
+メイリオはMeiryo/メイリオのローカルCSS指定のみで、未導入時は日本語ゴシックへフォールバックする。MicrosoftのフォントはpublicやGit/Dockerへ同梱しない。`node scripts/test-reader-fonts.mjs`（ローカル）、`node scripts/test-reader-fonts.mjs --public`（専用の公開検証アカウント有効化後）で本文の実描画フォントをCDP CSS.getPlatformFontsForNodeから確認する。通常のUbuntu ChromiumはNoto Sans CJK JPへのフォールバックを確認した。別のテストプロセス専用FONTCONFIG_FILEから、同じWindows端末に既存の `/mnt/c/Windows/Fonts/meiryo.ttc` を参照するとMeiryo・isCustomFont=falseの実描画を確認した。テスト用参照はGit管理外のsymlink/設定だけで、元ファイルをコピー・配信せず、通常環境のフォント設定も変更しない。ホストに該当フォントがない環境では実Meiryo検証はSKIPと明示する。
+
+明朝ラベルの見本を表示するため、既存の同梱OFL明朝は明朝選択時に加え、設定を開いたときにも必要に応じて読み込まれる。UI以外の作品データ・利用者設定は変更しない。

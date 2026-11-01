@@ -5,9 +5,9 @@
 .reader-shell{width:100%;max-width:1080px;margin-inline:auto}
 .reader-shell a{color:var(--green)}.reader-shell a:hover{text-decoration:underline}
 .reader-heading{padding:18px 0 24px;border-bottom:0}.reader-heading h1{font:700 22px/1.5 system-ui,sans-serif;margin:12px 0}
-.reader-body{margin:26px 12px 48px;padding:0;font-family:"メイリオ",Meiryo,"Noto Sans JP",sans-serif;font-size:18px;font-weight:400;line-height:1.95;letter-spacing:normal;white-space:break-spaces;overflow-wrap:anywhere;line-break:strict}
+.reader-body{margin:26px 12px 48px;padding:0;font-family:"Noto Sans JP","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;font-size:18px;font-weight:400;line-height:1.95;letter-spacing:normal;white-space:break-spaces;overflow-wrap:anywhere;line-break:strict}
 body[data-reader-font=mincho] .reader-body{font-family:"Novel Reader Mincho","Yu Mincho","Hiragino Mincho ProN","Noto Serif CJK JP",serif}
-body[data-reader-size="16"] .reader-body{font-size:16px}body[data-reader-size="20"] .reader-body{font-size:20px}body[data-reader-size="24"] .reader-body{font-size:24px}body[data-reader-size="28"] .reader-body{font-size:28px}
+body[data-reader-size="16"] .reader-body{font-size:16px}body[data-reader-size="24"] .reader-body{font-size:24px}body[data-reader-size="28"] .reader-body{font-size:28px}
 body[data-reader-theme]{background:var(--paper);color:var(--ink);min-height:100vh;--surface:#fffdf7;--muted:#62705f;--on-accent:#fff;--hover:#e7edde;--error:#a33636}
 body[data-reader-theme=white]{--paper:#fff;--surface:#f5f7f3}
 body[data-reader-theme=dark]{--paper:#171e19;--ink:#e5ebe3;--green:#afd0b2;--muted:#b5c2b4;--line:#526654;--surface:#222e25;--on-accent:#17231b;--hover:#314538;--error:#ffb4ae;color-scheme:dark}
@@ -36,6 +36,22 @@ input{accent-color:var(--green)}.reading-branch option:checked{background:var(--
 
 .story-info{max-width:790px;margin:auto}.info-top{display:flex;align-items:baseline;justify-content:space-between;gap:20px}.info-top .back{margin-bottom:15px}.story-info h1{font-size:1.8rem;overflow-wrap:anywhere}.story-info h2{font-size:1rem;margin:30px 0 12px}.info-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9}.story-info .setting-notes{margin-bottom:35px}#story-info-form select{max-width:100%}
 
-.icon-button{width:44px;min-width:44px;min-height:44px;padding:0;flex-shrink:0}.icon-button svg{display:block}.reader-tools{display:flex;gap:2px;align-items:center;flex-shrink:0}.reader-settings-trigger{font:20px Georgia,serif}.reader-top{align-items:flex-start;gap:12px}.reader-top .back{min-width:0;margin-top:10px}.reader-settings{padding:12px 18px;margin:8px 0 24px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}.reader-settings[hidden]{display:none}.settings-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.settings-heading h2{font-size:15px;margin:0}.settings-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.settings-controls label{margin:0;font-size:12px;color:var(--muted)}.settings-controls select{display:block;width:100%;min-height:44px;margin-top:6px}.reader-settings #reset-reader-settings{min-height:44px;padding-left:0}.reader-settings-status:empty,#reader-settings-status:empty{display:none}@media(max-width:550px){.settings-controls{grid-template-columns:1fr;gap:8px}.settings-controls label{display:grid;grid-template-columns:85px minmax(0,1fr);align-items:center}.settings-controls select{margin:0}.reader-settings{padding:10px 12px}.reader-top .back{font-size:12px}}
+.icon-button{width:44px;min-width:44px;min-height:44px;padding:0;flex-shrink:0}.icon-button svg{display:block}.reader-tools{display:flex;gap:2px;align-items:center;flex-shrink:0}.reader-settings-trigger{font:20px Georgia,serif}.reader-top{align-items:flex-start;gap:12px}.reader-top .back{min-width:0;margin-top:10px}.reader-settings{padding:12px 18px;margin:8px 0 24px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}.reader-settings[hidden]{display:none}.settings-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.settings-heading h2{font-size:15px;margin:0}.reader-settings #reset-reader-settings{min-height:44px;padding-left:0}#reader-settings-status:empty{display:none}@media(max-width:550px){.reader-settings{padding:10px 12px}.reader-top .back{font-size:12px}}
 
 .reader-branches{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap}.reader-branches .reading-controls{margin:0}.reader-branches .toc-candidates{flex-basis:100%;margin-left:0}
+
+body[data-reader-font=meiryo] .reader-body{font-family:Meiryo,"メイリオ","Noto Sans JP","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif}
+body[data-reader-theme=blue]{--paper:#edf7ff;--surface:#f7fbff;--ink:#24323b;--green:#285b65;--muted:#526779;--line:#9ab8cc}
+#reader-settings .settings-controls{display:block}
+.reader-setting-group{margin:18px 0 24px}.reader-setting-group h3{font-size:14px;font-weight:500;margin:0 0 9px;color:var(--ink)}
+.reader-segments{display:grid;gap:0;border:1px solid var(--line);border-radius:6px;min-width:0}.segments-4{grid-template-columns:repeat(4,minmax(0,1fr))}.segments-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+#reader-settings .reader-choice{display:flex;justify-content:center;align-items:center;min-width:0;min-height:64px;margin:0;padding:6px 4px;border:0;border-right:1px solid var(--line);border-radius:0;box-shadow:none;color:var(--ink);background:var(--surface);font-size:17px;font-weight:400;line-height:1.3;white-space:nowrap}
+#reader-settings .reader-choice:first-child{border-radius:5px 0 0 5px}#reader-settings .reader-choice:last-child{border-right:0;border-radius:0 5px 5px 0}#reader-settings .reader-choice:hover{filter:none}
+#reader-settings .reader-choice[aria-checked=true]{box-shadow:inset 0 0 0 3px var(--green);position:relative;z-index:1}
+#reader-settings .reader-choice:focus-visible{outline:2px dashed var(--green);outline-offset:-7px;position:relative;z-index:2}
+#reader-size [data-value="16"]{font-size:16px}#reader-size [data-value="18"]{font-size:18px}#reader-size [data-value="24"]{font-size:24px}#reader-size [data-value="28"]{font-size:28px}
+#reader-theme [data-value=white]{background:#fff;color:#272d29}#reader-theme [data-value=dark]{background:#171e19;color:#e5ebe3}#reader-theme [data-value=paper]{background:#f7f5ef;color:#272d29}#reader-theme [data-value=blue]{background:#edf7ff;color:#24323b}
+#reader-font [data-value=mincho]{font-family:"Novel Reader Mincho","Yu Mincho","Hiragino Mincho ProN",serif}#reader-font [data-value=gothic]{font-family:"Noto Sans JP","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif}#reader-font [data-value=meiryo]{font-family:Meiryo,"メイリオ","Noto Sans JP","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif}
+@media(max-width:550px){.reader-setting-group{margin:16px 0 22px}#reader-settings .reader-choice{min-height:62px}#reader-settings .settings-heading h2{font-size:17px}}
+
+#reader-settings .settings-heading h2{font-size:18px}

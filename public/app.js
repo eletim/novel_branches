@@ -1,4 +1,4 @@
-import {DEFAULT_READER_SETTINGS,loadReaderSettings,saveReaderSettings} from './reader-settings.mjs';
+import {DEFAULT_READER_SETTINGS,normalizeReaderSettings,loadReaderSettings,saveReaderSettings} from './reader-settings.mjs';
 import {branchPath,selectReading,candidatesFor,branchForCandidate} from './reading.mjs';
 const basePath = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
 const $ = s => document.querySelector(s);
@@ -21,17 +21,22 @@ function closeReaderSettings(focus=true) {
   const panel=$('#reader-settings'),button=$('#open-reader-settings');
   if(panel)panel.hidden=true;if(button){button.setAttribute('aria-expanded','false');if(focus)button.focus();}
 }
+function readerSegments(setting,label,options) {
+  return `<div class="reader-setting-group"><h3 id="reader-${setting}-label">${label}</h3><div id="reader-${setting}" class="reader-segments segments-${options.length}" role="radiogroup" aria-labelledby="reader-${setting}-label" data-setting="${setting}">${options.map(([value,text])=>`<button type="button" class="reader-choice" role="radio" data-value="${value}" aria-checked="false" tabindex="-1">${text}</button>`).join('')}</div></div>`;
+}
 function bindReaderSettings() {
   const button=$('#open-reader-settings'),panel=$('#reader-settings');
-  $('#reader-font').value=readerSettings.font;$('#reader-theme').value=readerSettings.theme;$('#reader-size').value=String(readerSettings.size);
-  button.onclick=()=>{if(!panel.hidden){closeReaderSettings();return;}panel.hidden=false;button.setAttribute('aria-expanded','true');$('#reader-font').focus();};
+  const sync=()=>{for(const group of panel.querySelectorAll('[role=radiogroup]'))for(const choice of group.querySelectorAll('[role=radio]')){const selected=String(readerSettings[group.dataset.setting])===choice.dataset.value;choice.setAttribute('aria-checked',String(selected));choice.tabIndex=selected?0:-1;}};
+  const preview=()=>{applyReaderSettings();sync();$('#reader-settings-status').textContent=saveReaderSettings(readerSettings)?'':'このブラウザに保存できません。現在の画面には反映しています。';};
+  const choose=(group,choice)=>{readerSettings=normalizeReaderSettings({...readerSettings,[group.dataset.setting]:group.dataset.setting==='size'?Number(choice.dataset.value):choice.dataset.value});preview();};
+  sync();
+  button.onclick=()=>{if(!panel.hidden){closeReaderSettings();return;}panel.hidden=false;button.setAttribute('aria-expanded','true');$('#reader-size [aria-checked="true"]').focus();};
   $('#close-reader-settings').onclick=()=>closeReaderSettings();
-  const preview=()=>{
-    readerSettings={font:$('#reader-font').value,theme:$('#reader-theme').value,size:Number($('#reader-size').value)};applyReaderSettings();
-    $('#reader-settings-status').textContent=saveReaderSettings(readerSettings)?'':'このブラウザに保存できません。現在の画面には反映しています。';
-  };
-  for(const selector of ['#reader-font','#reader-theme','#reader-size'])$(selector).onchange=preview;
-  $('#reset-reader-settings').onclick=()=>{readerSettings={...DEFAULT_READER_SETTINGS};$('#reader-font').value=readerSettings.font;$('#reader-theme').value=readerSettings.theme;$('#reader-size').value=readerSettings.size;preview();};
+  for(const group of panel.querySelectorAll('[role=radiogroup]')){
+    for(const choice of group.querySelectorAll('[role=radio]'))choice.onclick=()=>choose(group,choice);
+    group.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;const choices=[...group.querySelectorAll('[role=radio]')],current=choices.indexOf(e.target);if(current<0)return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?choices.length-1:(current+(['ArrowLeft','ArrowUp'].includes(e.key)?-1:1)+choices.length)%choices.length;choose(group,choices[next]);choices[next].focus();};
+  }
+  $('#reset-reader-settings').onclick=()=>{readerSettings={...DEFAULT_READER_SETTINGS};preview();};
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dialog.open&&$('#reader-settings')&&!$('#reader-settings').hidden){e.preventDefault();closeReaderSettings();}});
 async function api(path,method='GET',data,expectedUserId=user?.id) {
@@ -116,7 +121,7 @@ async function chapterView(id,generation,params) {
   const {branch,path}=selectReading(story,params.get('branch'),c.id),index=path.findIndex(ch=>ch.id===c.id);
   const previous=path[index-1],next=path[index+1],suffix=`?branch=${branch.id}`;
   if(generation!==viewGeneration)return;
-  app.innerHTML=`<div class="reader-shell"><div class="reader-top"><a class="back to-toc" href="#story/${c.story_id}${suffix}">${esc(story.title)} · 目次</a><div class="reader-tools"><button class="quiet icon-button reader-settings-trigger" id="open-reader-settings" title="読書設定" aria-label="読書設定" aria-expanded="false" aria-controls="reader-settings"><span aria-hidden="true">Aa</span></button>${editIcon('open-editor','この話の執筆メニュー')}</div></div><section id="reader-settings" class="reader-settings" aria-label="読書設定" hidden><div class="settings-heading"><h2>読書設定</h2><button class="quiet icon-button" id="close-reader-settings" aria-label="読書設定を閉じる" title="閉じる">×</button></div><div class="settings-controls"><label for="reader-font">フォント<select id="reader-font"><option value="gothic">ゴシック体</option><option value="mincho">明朝体</option></select></label><label for="reader-theme">背景色<select id="reader-theme"><option value="paper">紙色</option><option value="white">白</option><option value="dark">暗色</option></select></label><label for="reader-size">文字サイズ<select id="reader-size">${[16,18,20,24,28].map(size=>`<option value="${size}">${size}px</option>`).join('')}</select></label></div><button class="quiet small" id="reset-reader-settings">初期設定に戻す</button><p id="reader-settings-status" class="hint" role="status"></p></section><div class="reader-heading"><span class="eyebrow">第${index+1}話</span><h1>${esc(c.title)}</h1><div class="meta chapter-creator">${esc(c.author)} · ${updatedTime(c)}</div><div class="reader-branches"><div class="reading-controls">${branchSelect(story,branch)}</div>${branchButton('reader-candidates',index+1,candidatesFor(story,c).length-1)}<div id="reader-candidates" class="toc-candidates" hidden>${candidateRows(story,c,index,branch)}</div></div></div><article class="reader-body">${esc(c.body)}</article><nav class="chapter-nav" aria-label="話の前後移動">${previous?`<a class="previous-chapter" href="#chapter/${previous.id}${suffix}">← 前の話</a>`:'<span></span>'}<a class="to-toc" href="#story/${c.story_id}${suffix}">目次</a>${next?`<a class="next-chapter" href="#chapter/${next.id}${suffix}">次の話 →</a>`:'<span></span>'}</nav><div class="reader-actions"><button id="like" class="quiet ${c.liked?'liked':''}" aria-pressed="${!!c.liked}">${c.liked?'♥':'♡'} グッド ${c.likes}</button></div></div>`;
+  app.innerHTML=`<div class="reader-shell"><div class="reader-top"><a class="back to-toc" href="#story/${c.story_id}${suffix}">${esc(story.title)} · 目次</a><div class="reader-tools"><button class="quiet icon-button reader-settings-trigger" id="open-reader-settings" title="ビューアー設定" aria-label="ビューアー設定" aria-expanded="false" aria-controls="reader-settings"><span aria-hidden="true">Aa</span></button>${editIcon('open-editor','この話の執筆メニュー')}</div></div><section id="reader-settings" class="reader-settings" aria-label="ビューアー設定" hidden><div class="settings-heading"><h2>ビューアー設定</h2><button class="quiet icon-button" id="close-reader-settings" aria-label="ビューアー設定を閉じる" title="閉じる">×</button></div><div class="settings-controls">${readerSegments('size','文字サイズ',[[16,'小'],[18,'中'],[24,'大'],[28,'特大']])}${readerSegments('theme','背景色',[['white','白'],['dark','黒'],['paper','生成り'],['blue','水色']])}${readerSegments('font','フォント',[['mincho','明朝'],['gothic','ゴシック'],['meiryo','メイリオ']])}</div><button class="quiet small" id="reset-reader-settings">初期設定に戻す</button><p id="reader-settings-status" class="hint" role="status"></p></section><div class="reader-heading"><span class="eyebrow">第${index+1}話</span><h1>${esc(c.title)}</h1><div class="meta chapter-creator">${esc(c.author)} · ${updatedTime(c)}</div><div class="reader-branches"><div class="reading-controls">${branchSelect(story,branch)}</div>${branchButton('reader-candidates',index+1,candidatesFor(story,c).length-1)}<div id="reader-candidates" class="toc-candidates" hidden>${candidateRows(story,c,index,branch)}</div></div></div><article class="reader-body">${esc(c.body)}</article><nav class="chapter-nav" aria-label="話の前後移動">${previous?`<a class="previous-chapter" href="#chapter/${previous.id}${suffix}">← 前の話</a>`:'<span></span>'}<a class="to-toc" href="#story/${c.story_id}${suffix}">目次</a>${next?`<a class="next-chapter" href="#chapter/${next.id}${suffix}">次の話 →</a>`:'<span></span>'}</nav><div class="reader-actions"><button id="like" class="quiet ${c.liked?'liked':''}" aria-pressed="${!!c.liked}">${c.liked?'♥':'♡'} グッド ${c.likes}</button></div></div>`;
   applyReaderSettings();bindReaderSettings();bindBranches();bindBranchSelect(story,index);
   $('#open-editor').onclick=()=>{
     closeReaderSettings(false);
