@@ -53,3 +53,5 @@
 #nav button{white-space:nowrap}.brand-icon{flex-shrink:0}.branch-toggle svg{display:block}
 
 .branch-count{font-size:11px;font-variant-numeric:tabular-nums}.branch-toggle{gap:5px}.branch-toggle:disabled{opacity:.65;cursor:default}.reading-branch{font-size:12px;padding:5px 8px;max-width:220px;background:transparent;color:var(--green);border-color:var(--line)}.reading-controls{display:flex;justify-content:flex-end;margin:12px 0}.visibility-setting{border-top:1px solid var(--line);margin-top:20px;padding-top:10px}.visibility-setting label{display:flex;gap:10px;align-items:center}.visibility-setting input{width:auto}.visibility-setting .error{color:#a33636}.reader-shell .toc-title{color:var(--green)}
+
+input{accent-color:var(--green)}.reading-branch option:checked{background:var(--green);color:var(--paper)}
