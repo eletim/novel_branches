@@ -10,18 +10,7 @@ export function selectReading(story,branchId,chapterId=0) {
   let branch=story.branches.find(b=>b.id===Number(branchId));
   if(!branch||(chapterId&&!branchPath(story,branch.id).some(c=>c.id===chapterId))){
     const chapter=story.chapters.find(c=>c.id===chapterId);
-    branch=story.branches.find(b=>b.id===chapter?.branch_id)||story.branches[0];
-  }
-  // A branch may stop at a shared episode while its only continuations belong to forks.
-  // Extend along one real descendant path so those next-episode candidates stay reachable.
-  const visited=new Set();
-  while(!visited.has(branch.id)){
-    visited.add(branch.id);
-    const next=story.chapters.filter(c=>c.parent_id===branch.head_id).sort((a,b)=>a.id-b.id)[0];
-    if(!next)break;
-    const extended=story.branches.find(b=>b.id===next.branch_id&&branchPath(story,b.id).some(c=>c.id===next.id));
-    if(!extended||extended.id===branch.id)break;
-    branch=extended;
+    branch=(chapter?story.branches.find(b=>b.id===chapter.branch_id):null)||story.branches.find(b=>b.id===story.main_branch_id)||story.branches[0];
   }
   return {branch,path:branchPath(story,branch.id)};
 }

@@ -104,3 +104,5 @@ npm run dev
 - 単一プロセスとSQLiteの構成です。データを持つサーバーで起動してください。
 
 設計は [docs/architecture.md](docs/architecture.md)、作業状態は [docs/status.md](docs/status.md)。
+
+作品を開くとMainを表示し、前後移動は選択したブランチの順序を保ちます。別案アイコンは現在の話を除いた件数です。最初の制作者は本文のEditorからホーム一覧での表示設定を変更できます。ホームの「通常／すべて」は検索・並べ替え・ページ送りにも適用し、直接URLとMCPの閲覧範囲は変わりません。

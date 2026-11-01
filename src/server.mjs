@@ -123,12 +123,13 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
           res.setHeader('Set-Cookie',sessionCookie('',{secure:secureCookies}));
           return send(200,{ok:true,...(logoutUrl ? {logoutUrl} : {})});
         }
-        if (url.pathname === '/api/stories' && req.method === 'GET') return send(200,{stories:store.listStories({query:url.searchParams.get('q') || '',sort:url.searchParams.get('sort') || 'new',limit:Number(url.searchParams.get('limit') || 50),offset:Number(url.searchParams.get('offset') || 0)})});
+        if (url.pathname === '/api/stories' && req.method === 'GET') return send(200,{stories:store.listStories({query:url.searchParams.get('q') || '',sort:url.searchParams.get('sort') || 'new',limit:Number(url.searchParams.get('limit') || 50),offset:Number(url.searchParams.get('offset') || 0),includeHidden:url.searchParams.get('view')==='all'})});
         if (url.pathname === '/api/stories' && req.method === 'POST') return send(201,store.createStory(user.id,await body(req)));
         const match = url.pathname.match(/^\/api\/(stories|chapters|branches)\/([1-9]\d*)(?:\/(fork|alternate|like|chapters|path))?$/);
         if (match) {
           const [,kind,rawId,action] = match, id = Number(rawId);
           if (!Number.isSafeInteger(id)) throw new AppError('IDが不正です。');
+          if (req.method === 'PATCH' && !action && kind === 'stories') return send(200,store.setStoryVisibility(user.id,id,await body(req)));
           if (req.method === 'GET' && !action && kind === 'stories') return send(200,store.story(id));
           if (req.method === 'PATCH' && !action && kind === 'chapters') return send(200,store.edit(user.id,id,await body(req)));
           if (req.method === 'POST' && kind === 'chapters' && action === 'alternate') return send(201,store.alternate(user.id,id,await body(req)));

@@ -51,6 +51,12 @@ MCPは閲覧専用で、ブラウザ用cookieと独立したBearerトークン�
 
 作品の最初の制作者はstories、各話の実際の投稿者はchapters.author_idに保存する。参加者なら他者の経路にも追加できる。既存v2の話は当時の所有権ルールに従い所属branchの作者で補完し、updated_atはcreated_at、revisionは1へ移行する。既存の親子関係・作者ID・票は保持する。
 
-通常の目次は選択した経路を縦に表示し、候補は同じparent_idの話だけをまとめる。第1話はNULL親の候補を扱い、途中・入れ子でも選択した祖先と整合する続きだけを表示する。経路の末尾が他branchへ続く場合はその子孫をたどる。hash内branchを本文・前後移動・目次で引き継ぐ。
+通常の目次は選択した経路を縦に表示し、候補は同じparent_idの話だけをまとめる。第1話はNULL親の候補を扱い、途中・入れ子でも選択した祖先と整合する続きだけを表示する。選択したbranchのheadで読み終え、別branchの子孫へは自動で進まない。hash内branchを本文・前後移動・目次で引き継ぐ。
 
 PATCH /api/chapters/:idはサーバーでauthor_idを照合する。expectedRevisionが一致する場合のみ本文・タイトル・updated_at・revisionを変更し、競合は409、他者は403。制作者や親の変更は400。編集は共通ノードを更新するので全経路とMCPで同じ最新版を読む。編集revisionと続話expectedHeadIdは下書きと共に保存し、失敗・再読込で入力を残す。最新状態からやり直す操作は明示的な下書き破棄を伴う。
+
+## Mainとホーム表示設定（schema v4）
+
+stories.main_branch_idは作品の初期読書経路を示す。移行は最初の「本編」を優先し、なければ最古のbranchを使う。既存branch名・ID・話の親子関係・headは変更しない。URL内branchが指定されればその経路を使用し、末尾から別branchへ自動延長しない。別案は同じparent_idの話から現在の話を除いて数える。全branchを選べる小さな読書経路selectにより、現在の末尾の先から作られたbranchにも明示的に切り替えられる。
+
+stories.hidden_from_homeは0/1、既存・新規とも0。PATCH /api/stories/:idのhiddenFromHome真偽値で変更し、サーバーで最初の制作者を検証する。Web一覧はview=allの場合だけ含め、検索条件・人気順・LIMIT/OFFSETより前に絞る。URLからの作品/本文/グッドや権限は変えない。MCPのlist_storiesはincludeHidden=trueを明示し従来の取得範囲を維持する。

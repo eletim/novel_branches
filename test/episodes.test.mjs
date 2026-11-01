@@ -46,10 +46,12 @@ test('目次候補は同じ親の兄弟だけ。第1話の別案・途中・入�
   assert.equal(branchForCandidate(story,store.chapter(root.chapterId),nested.branchId),nested.branchId);
   assert.equal(selectReading(story,otherRoot.branchId,third.chapterId).branch.id,root.branchId);
   const continuation=store.fork(b.id,nested.chapterId,{title:'Nested4',body:'fourth'});
-  assert.deepEqual(selectReading(store.story(root.storyId),nested.branchId).path.map(c=>c.id),[root.chapterId,alternate.chapterId,nested.chapterId,continuation.chapterId]);
+  assert.deepEqual(selectReading(store.story(root.storyId),nested.branchId).path.map(c=>c.id),[root.chapterId,alternate.chapterId,nested.chapterId]);
+  assert.deepEqual(selectReading(store.story(root.storyId),continuation.branchId).path.map(c=>c.id),[root.chapterId,alternate.chapterId,nested.chapterId,continuation.chapterId]);
+  assert.equal(selectReading(store.story(root.storyId)).branch.id,root.branchId);
  }finally{store.close();}
 });
-test('v2の既存話を作者・本文・親・グッドを維持してv3へ移行し再実行しても作者を変えない',()=>{
+test('v2の既存話を作者・本文・親・グッドを維持してv4へ移行し再実行しても作者を変えない',()=>{
  const dir=mkdtempSync(join(tmpdir(),'episode-migration-')),path=join(dir,'old.db');
  const db=new DatabaseSync(path);db.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT,display_name TEXT,password_hash TEXT);
  CREATE TABLE stories(id INTEGER PRIMARY KEY,title TEXT,summary TEXT,author_id INTEGER,created_at TEXT);
@@ -63,7 +65,7 @@ test('v2の既存話を作者・本文・親・グッドを維持してv3へ移�
  let store=new Store(path);try{
   const c=store.chapter(1);assert.equal(c.author_id,1);assert.equal(c.updated_at,c.created_at);assert.equal(c.revision,1);assert.equal(c.body,'old body');assert.equal(c.likes,1);
   const next=store.append(2,1,{title:'B continuation',body:'B body',expectedHeadId:1});store.close();store=new Store(path);
-  assert.equal(store.chapter(next.chapterId).author_id,2);assert.equal(store.chapter(1).author_id,1);assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,3);
+  assert.equal(store.chapter(next.chapterId).author_id,2);assert.equal(store.chapter(1).author_id,1);assert.equal(store.db.prepare('PRAGMA user_version').get().user_version,4);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('HTTPで他者の続話・別案追加を許可し、他者編集・未認証・古い版を拒否する',async()=>{

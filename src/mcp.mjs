@@ -26,7 +26,7 @@ export function rpc(store, message, {oauth=false} = {}) {
     for (const key of Object.keys(args)) if (!(key in tool.inputSchema.properties)) throw new AppError(`未対応の引数: ${key}`);
     if (args.sort && !['new','popular'].includes(args.sort)) throw new AppError('並び順が不正です。');
     let data;
-    if (tool.name === 'list_stories') data = {stories:store.listStories(args)};
+    if (tool.name === 'list_stories') data = {stories:store.listStories({...args,includeHidden:true})};
     if (tool.name === 'get_story') data = store.story(args.storyId);
     if (tool.name === 'get_chapter') data = store.chapter(args.chapterId);
     if (tool.name === 'get_branch_path') data = {chapters:store.path(args.branchId)};

@@ -53,7 +53,12 @@ export class Store {
       // Old versions restricted each branch to its author; preserve that attribution.
       this.db.exec(`UPDATE chapters SET author_id=(SELECT author_id FROM branches WHERE branches.id=chapters.branch_id) WHERE author_id IS NULL;
         UPDATE chapters SET updated_at=created_at WHERE updated_at IS NULL;
-        PRAGMA user_version=3;`);
+        `);
+      const storyColumns=new Set(this.db.prepare('PRAGMA table_info(stories)').all().map(c=>c.name));
+      if(!storyColumns.has('hidden_from_home'))this.db.exec('ALTER TABLE stories ADD COLUMN hidden_from_home INTEGER NOT NULL DEFAULT 0 CHECK(hidden_from_home IN (0,1))');
+      if(!storyColumns.has('main_branch_id'))this.db.exec('ALTER TABLE stories ADD COLUMN main_branch_id INTEGER REFERENCES branches(id)');
+      this.db.exec(`UPDATE stories SET main_branch_id=COALESCE((SELECT id FROM branches WHERE story_id=stories.id AND title='本編' ORDER BY id LIMIT 1),(SELECT id FROM branches WHERE story_id=stories.id ORDER BY id LIMIT 1)) WHERE main_branch_id IS NULL;
+        PRAGMA user_version=4;`);
     });
   }
   close() { this.db.close(); }
@@ -125,15 +130,15 @@ export class Store {
     else if (subject) this.db.prepare('DELETE FROM sessions WHERE auth_type=? AND issuer=? AND subject=?').run('oidc',issuer,subject);
   }
   logout(token) { if (token) this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash(token)); }
-  listStories({ query = '', sort = 'new', limit = 50, offset = 0 } = {}) {
+  listStories({ query = '', sort = 'new', limit = 50, offset = 0, includeHidden = true } = {}) {
     query = text(query || ' ', '検索', 200, 0);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(offset) || offset < 0) throw new AppError('ページ指定が不正です。');
     return this.db.prepare(`SELECT s.*,u.display_name author,
       (SELECT COUNT(*) FROM branches b WHERE b.story_id=s.id) branch_count,
       (SELECT COUNT(*) FROM chapters c JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) chapter_count,
       (SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) likes
-      FROM stories s JOIN users u ON u.id=s.author_id WHERE instr(s.title,?)>0 OR instr(s.summary,?)>0
-      ORDER BY ${sort === 'popular' ? 'likes DESC,' : ''} s.id DESC LIMIT ? OFFSET ?`).all(query, query, limit, offset);
+      FROM stories s JOIN users u ON u.id=s.author_id WHERE (? OR s.hidden_from_home=0) AND (instr(s.title,?)>0 OR instr(s.summary,?)>0)
+      ORDER BY ${sort === 'popular' ? 'likes DESC,' : ''} s.id DESC LIMIT ? OFFSET ?`).all(includeHidden ? 1 : 0, query, query, limit, offset);
   }
   story(id) {
     const s = this.db.prepare('SELECT s.*,u.display_name author FROM stories s JOIN users u ON u.id=s.author_id WHERE s.id=?').get(id);
@@ -141,6 +146,15 @@ export class Store {
     s.branches = this.db.prepare(`SELECT b.*,u.display_name author,(SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id WHERE c.branch_id=b.id) likes FROM branches b JOIN users u ON u.id=b.author_id WHERE b.story_id=? ORDER BY b.id`).all(id);
     s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,c.created_at,c.updated_at,c.revision,c.author_id,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
     return s;
+  }
+  setStoryVisibility(userId,id,input) {
+    return this.transaction(()=>{
+      const story=this.story(id);
+      if(story.author_id!==userId)throw new AppError('作品の表示設定は最初の制作者だけが変更できます。',403);
+      if(Object.keys(input).length!==1||typeof input.hiddenFromHome!=='boolean')throw new AppError('表示設定を真偽値で指定してください。');
+      this.db.prepare('UPDATE stories SET hidden_from_home=? WHERE id=?').run(input.hiddenFromHome?1:0,id);
+      return this.story(id);
+    });
   }
   chapter(id, viewer = 0) {
     const c = this.db.prepare(`SELECT c.*,b.story_id,b.title branch_title,u.display_name author,(SELECT COUNT(*) FROM likes WHERE chapter_id=c.id) likes,EXISTS(SELECT 1 FROM likes WHERE chapter_id=c.id AND user_id=?) liked FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.id=?`).get(viewer, id);
@@ -166,6 +180,7 @@ export class Store {
       const storyId = Number(s.lastInsertRowid);
       const b = this.db.prepare('INSERT INTO branches(story_id,title,author_id) VALUES(?,?,?)').run(storyId, '本編',userId);
       const branchId = Number(b.lastInsertRowid);
+      this.db.prepare('UPDATE stories SET main_branch_id=? WHERE id=?').run(branchId,storyId);
       const chapterId = this.insertChapter(branchId,null,chapterTitle,body,userId);
       return { storyId,branchId,chapterId };
     });
