@@ -37,15 +37,15 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "${APP_ORIGIN}/auth/callback"
+        "${APP_ORIGIN}${APP_BASE_PATH}/auth/callback"
       ],
       "webOrigins": [
         "${APP_ORIGIN}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${APP_ORIGIN}/",
-        "backchannel.logout.url": "http://app:3000/auth/backchannel-logout",
+        "post.logout.redirect.uris": "${APP_ORIGIN}${APP_BASE_PATH}/",
+        "backchannel.logout.url": "http://app:3000${APP_BASE_PATH}/auth/backchannel-logout",
         "backchannel.logout.session.required": "true"
       },
       "protocolMappers": [

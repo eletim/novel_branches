@@ -1,5 +1,8 @@
 # Deliberately omit query strings: authorization codes must not enter access logs.
 log_format novels '$remote_addr [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent';
+# Error messages can include a full Referer/auth query; retain only critical errors.
+# Sanitized access logs still record every request path and status.
+error_log /var/log/nginx/error.log crit;
 server_tokens off;
 limit_req_zone $binary_remote_addr zone=auth_requests:10m rate=10r/s;
 
@@ -57,6 +60,7 @@ server {
 
     # Only this application's realm and login assets are exposed.
     # /id/admin, /id/realms/master and Keycloak management endpoints remain private.
+    location ^~ /id/realms/novel-branches/clients-registrations/ { return 404; }
     location ^~ /id/realms/novel-branches/ {
         limit_req zone=auth_requests burst=40 nodelay;
         limit_req_status 429;
@@ -65,12 +69,12 @@ server {
     location ^~ /id/resources/ { proxy_pass http://keycloak:8080; }
     location /id { return 404; }
     location = /health { return 404; }
-    location = /auth/login {
+    location = ${APP_BASE_PATH}/auth/login {
         limit_req zone=auth_requests burst=10 nodelay;
         limit_req_status 429;
         proxy_pass http://app:3000;
     }
-    location = /mcp {
+    location = ${APP_BASE_PATH}/mcp {
         proxy_buffering off;
         proxy_pass http://app:3000;
     }

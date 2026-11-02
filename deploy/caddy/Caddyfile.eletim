@@ -1,0 +1,34 @@
+{
+    # Runtime errors can otherwise include OAuth callback queries and Referer.
+    # Nginx retains sanitized path/status access logs for diagnosis.
+    log default {
+        format filter {
+            wrap json
+            fields {
+                request delete
+            }
+        }
+    }
+}
+
+eletim.jp {
+    redir / /novel/ 302
+    redir /novel /novel/ 308
+    handle /novel/* {
+        reverse_proxy novel-public-nginx-1:80
+    }
+    @metadata path /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/novel/mcp /.well-known/oauth-authorization-server/id/realms/novel-branches
+    handle @metadata {
+        reverse_proxy novel-public-nginx-1:80
+    }
+    @login path /id/realms/novel-branches/* /id/resources/*
+    handle @login {
+        reverse_proxy novel-public-nginx-1:80
+    }
+    handle /ntfy* {
+        respond "ntfy has been retired; subpath hosting is unsupported." 410
+    }
+    handle {
+        respond 404
+    }
+}

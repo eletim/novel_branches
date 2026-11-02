@@ -32,8 +32,9 @@ test('任意の話から分岐し、入れ子の分岐でも共通の話を順�
 test('作者の所有権と古い画面からの投稿競合を確認する',()=>{
   const {store,a,b,root}=fixture();
   try {
-    assert.throws(()=>store.append(b.id,root.branchId,{title:'侵入',body:'test',expectedHeadId:root.chapterId}),e=>e.status===403);
-    store.append(a.id,root.branchId,{title:'次',body:'test',expectedHeadId:root.chapterId});
+    const next=store.append(b.id,root.branchId,{title:'別の制作者の続話',body:'test',expectedHeadId:root.chapterId});
+    assert.equal(store.chapter(next.chapterId).author_id,b.id);
+    assert.throws(()=>store.edit(a.id,next.chapterId,{title:'侵入',body:'test',expectedRevision:1}),e=>e.status===403);
     assert.throws(()=>store.append(a.id,root.branchId,{title:'古い画面',body:'test',expectedHeadId:root.chapterId}),e=>e.status===409);
     assert.equal(store.story(root.storyId).chapters.length,2);
   } finally {store.close();}
@@ -99,7 +100,7 @@ test('HTTPで2人がログイン・投稿・分岐・評価し、MCPでも同じ
     assert.equal((await login.json()).user.id,a.id);
     const bobLogin=await request('/api/login','POST',{username:'bob',password:'password-bob'}),bob=bobLogin.headers.get('set-cookie').split(';')[0];
     const fork=await request(`/api/chapters/${root.chapterId}/fork`,'POST',{branchTitle:'Bob世界',title:'Bob2',body:'Bobの本文'},bob),f=await fork.json();assert.equal(fork.status,201);
-    assert.equal((await request(`/api/branches/${root.branchId}/chapters`,'POST',{title:'NG',body:'NG',expectedHeadId:root.chapterId},bob)).status,403);
+    assert.equal((await request(`/api/branches/${root.branchId}/chapters`,'POST',{title:'共同の続話',body:'Bobが追加',expectedHeadId:root.chapterId},bob)).status,201);
     const posted=await request('/api/stories','POST',{...input,title:'Webから投稿'},cookie);assert.equal(posted.status,201);
     assert.equal((await request(`/api/chapters/${f.chapterId}/like`,'PUT',{liked:true},cookie)).status,200);
     assert.equal((await (await request(`/api/chapters/${f.chapterId}`, 'GET',undefined,bob)).json()).likes,1);
