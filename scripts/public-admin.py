@@ -20,6 +20,13 @@ const r=await fetch(base+'/realms/master/protocol/openid-connect/token',{method:
 if(!r.ok)throw Error('Admin authentication failed: '+r.status);
 const token=(await r.json()).access_token,realm='/admin/realms/novel-branches';
 if(c.syncDisplayNames){
+ const scopes=await request(realm+'/client-scopes','GET',null,token),profile=scopes.find(s=>s.name==='profile');
+ if(!profile)throw Error('Profile scope missing');
+ const mappers=await request(realm+'/client-scopes/'+profile.id+'/protocol-mappers/models','GET',null,token);
+ const existing=mappers.find(m=>m.config?.['claim.name']==='given_name');
+ const mapper={name:'given name',protocol:'openid-connect',protocolMapper:'oidc-usermodel-property-mapper',config:{'user.attribute':'firstName','claim.name':'given_name','jsonType.label':'String','id.token.claim':'true','access.token.claim':'true','userinfo.token.claim':'true'}};
+ if(existing&&(existing.protocolMapper!==mapper.protocolMapper||existing.config?.['user.attribute']!=='firstName'))throw Error('Unexpected given_name mapper; no overwrite performed');
+ await request(realm+'/client-scopes/'+profile.id+'/protocol-mappers/models'+(existing?'/'+existing.id:''),existing?'PUT':'POST',{...mapper,...(existing?{id:existing.id}:{})},token);
  const {Store}=await import('./src/store.mjs'),store=new Store();
  try{
   const identities=store.db.prepare('SELECT subject,user_id FROM oidc_identities WHERE issuer=?').all(process.env.OIDC_ISSUER),updates=[];

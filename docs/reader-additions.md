@@ -17,7 +17,7 @@ schema v7はcommentsとインデックスを追加する。既存の作品・本
 
 コメントはHTMLとして解釈しない。下書きはユーザー/話ごとにブラウザへ保存し、通信失敗や再ログインでも復元できる。新APIは従来のセッション・Origin・別ユーザーへの切替検知に従う。MCPは既存の4つの閲覧ツールを維持する。
 
-既存ユーザーの名字も直ちに非表示にするには、更新後のVPSで `python3 scripts/public-admin.py --sync-display-names` を実行する。設定済みissuerとsubjectをKeycloakの正確なIDへ照合し、全取得に成功してからローカルdisplay_nameだけを一括更新する。Keycloakのプロフィール・パスワード・ロールは変更しない。次回ログインも同じ名前選択規則を使う。
+既存ユーザーの名字も直ちに非表示にするには、更新後のVPSで `python3 scripts/public-admin.py --sync-display-names` を実行する。まずprofile scopeにfirstName→given_nameのマッピングを追加し（既存の異なるマッピングは上書きせず停止）、設定済みissuerとsubjectをKeycloakの正確なIDへ照合し、全取得に成功してからローカルdisplay_nameだけを一括更新する。Keycloakのプロフィール・パスワード・ロールは変更しない。次回ログインも同じ名前選択規則を使う。
 
 ## 検証
 

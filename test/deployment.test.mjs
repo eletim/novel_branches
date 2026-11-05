@@ -46,3 +46,9 @@ test('localhost fixtures are reused without rotating passwords or certificates',
     assert.equal(readFileSync(join(dir,'deploy/.test/stack.env'),'utf8'),before[0]);
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
+
+test('profile scope supplies given_name without relying on the full name claim',()=>{
+ const realm=JSON.parse(readFileSync(new URL('../deploy/keycloak/novel-branches-realm.json',import.meta.url),'utf8'));
+ const mapper=realm.clientScopes.find(s=>s.name==='profile').protocolMappers.find(m=>m.config?.['claim.name']==='given_name');
+ assert.equal(mapper.protocolMapper,'oidc-usermodel-property-mapper');assert.equal(mapper.config['user.attribute'],'firstName');assert.equal(mapper.config['id.token.claim'],'true');
+});

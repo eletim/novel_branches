@@ -6,7 +6,7 @@ import {existsSync,readFileSync} from 'node:fs';
 process.loadEnvFile('deploy/.test/public.env');process.loadEnvFile('deploy/.test/chatgpt.env');
 const origin=process.env.APP_ORIGIN,resource=origin+process.env.APP_BASE_PATH+'/mcp',callback=process.env.MCP_CALLBACK;
 assert.equal(resource,'https://eletim.jp/novel/mcp');
-const browser=await chromium.launch();
+const browser=await chromium.launch({...process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{}});
 const secretValues=[process.env.MCP_CLIENT_SECRET,...Object.entries(process.env).filter(([k])=>/PASSWORD/.test(k)).map(([,v])=>v)];
 let stage='discovery';
 async function token(body){
