@@ -37,6 +37,8 @@ jobs:
           certutil -N --empty-password -d "sql:$HOME/.pki/nssdb"
           certutil -A -d "sql:$HOME/.pki/nssdb" -n novel-branches-local -t 'C,,' -i deploy/.test/tls/fullchain.pem
       - name: Browser collaboration and recovery regression
+        env:
+          TEST_COMPOSE_PROJECT: novel-branches-test
         run: CHROME_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")" npm run test:browser
       - name: Reader additions browser regression
         run: node scripts/test-reader-additions.mjs

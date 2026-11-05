@@ -21,7 +21,7 @@ schema v7はcommentsとインデックスを追加する。既存の作品・本
 
 ## 検証
 
-- `npm test`: 44件。権限、共有/入れ子経路、競合、コピーの読書順、Unicode集計、コメント永続化とページ送り、姓を使わないOIDC、従来の認証・MCP・移行を確認。
+- `npm test`: 45件。権限、共有/入れ子経路、競合、コピーの読書順、Unicode集計、コメント永続化とページ送り、姓を使わないOIDC、従来の認証・MCP・移行を確認。
 - `node scripts/test-browser.mjs --local`: 既存の共同編集・管理者・分岐・下書き・ビューアー設定・PC/375pxの回帰確認。
 - `node scripts/test-reader-additions.mjs`: コピー実体/拒否時の手動コピー、エスケープ、コメント失敗時の下書き、本人削除、管理者の並べ替え、共有経路保持、PC/375pxの表示。
 - 公開先の確認は専用検証ユーザーを有効化し `node scripts/test-reader-additions.mjs --public` と `TEST_STACK_ENV=deploy/.test/public.env node scripts/test-browser.mjs`。検証作品はデフォルト非表示、終了後は検証ユーザーを無効化する。
