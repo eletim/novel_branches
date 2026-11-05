@@ -26,4 +26,14 @@ schema v7はcommentsとインデックスを追加する。既存の作品・本
 - `node scripts/test-reader-additions.mjs`: コピー実体/拒否時の手動コピー、エスケープ、コメント失敗時の下書き、本人削除、管理者の並べ替え、共有経路保持、PC/375pxの表示。
 - 公開先の確認は専用検証ユーザーを有効化し `node scripts/test-reader-additions.mjs --public` と `TEST_STACK_ENV=deploy/.test/public.env node scripts/test-browser.mjs`。検証作品はデフォルト非表示、終了後は検証ユーザーを無効化する。
 
-公開配置の実施結果とバックアップ先は配置完了後に記録する。mainへのマージは自動で行わない。
+## eletim.jpへの配置（2026-11-05）
+
+PR #6、ブランチ `feat/simple-reader-additions` を `https://eletim.jp/novel/` へ配置した。mainへはマージしていない。
+
+変更前の両DB・設定バックアップは `/home/ubuntu/novel-backups/20261105T022529Z`。v7の追加移行と表示名同期を実施。既存87作品・182話・131経路・19票・140管理者行・4つのOIDC対応を、移行後と公開ブラウザ検証後の両方で行ハッシュ比較し保持を確認した。ユーザーはdisplay_nameのみを比較対象から除外し、それ以外の全列を保持。表示名同期は再実行時0/4件更新で冪等性を確認。
+
+本番のprofile scopeにgiven_nameが未定義だったため、ユーザー名へのフォールバックを実ブラウザで発見し、firstNameのmapperを追加した。実ログインで名の表示を確認。本人のパスワード・姓・ロール・作品管理権限を変更していない。
+
+45件の自動テスト、ローカル/公開の既存ブラウザ回帰と追加機能の実操作が成功。公開Chromeで1280px/375px、コピーの実クリップボードと拒否時の選択欄、文字数、コメントのHTML無効化・下書き復元・本人削除、管理者の話数入れ替えと別経路保持を確認。OAuthの署名/PKCE/権限拒否、MCPの4ツールとrefreshも確認した。ChatGPT本体の接続を代理確認したものではない。
+
+検証作品は専用ユーザーで作成し通常の一覧では非表示。スクリーンショットはGit管理外の `deploy/.test/evidence/additions-public/`、既存機能の結果は `deploy/.test/evidence/episodes-public/`。実機スマートフォンやSafariは未確認。
