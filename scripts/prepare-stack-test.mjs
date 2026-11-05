@@ -16,7 +16,7 @@ chmodSync(directory,0o700);
 const secret=()=>randomBytes(32).toString('hex');
 const passwords={member:secret(),other:secret(),outsider:secret()};
 const realm=JSON.parse(readFileSync('deploy/keycloak/novel-branches-realm.json','utf8'));
-realm.users=Object.entries(passwords).map(([name,password])=>({username:'test-'+name,enabled:true,email:`${name}@example.test`,emailVerified:true,firstName:'Test',lastName:name,credentials:[{type:'password',value:password,temporary:false}],realmRoles:name==='outsider'?[]:['novel-member'],requiredActions:[]}));
+realm.users=Object.entries(passwords).map(([name,password])=>({username:'test-'+name,enabled:true,email:`${name}@example.test`,emailVerified:true,firstName:'Test '+name,lastName:name,credentials:[{type:'password',value:password,temporary:false}],realmRoles:name==='outsider'?[]:['novel-member'],requiredActions:[]}));
 // Password grant is enabled ONLY in this ignored test fixture, never in the shipped realm.
 realm.clients.find(c=>c.clientId==='novel-mcp').directAccessGrantsEnabled=true;
 // Readable by the non-root Keycloak UID inside the container. Test credentials only.

@@ -19,6 +19,27 @@ async function request(path,method='GET',data,token){
 const r=await fetch(base+'/realms/master/protocol/openid-connect/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:'admin-cli',grant_type:'password',username:c.admin,password:c.secret})});
 if(!r.ok)throw Error('Admin authentication failed: '+r.status);
 const token=(await r.json()).access_token,realm='/admin/realms/novel-branches';
+if(c.syncDisplayNames){
+ const scopes=await request(realm+'/client-scopes','GET',null,token),profile=scopes.find(s=>s.name==='profile');
+ if(!profile)throw Error('Profile scope missing');
+ const mappers=await request(realm+'/client-scopes/'+profile.id+'/protocol-mappers/models','GET',null,token);
+ const existing=mappers.find(m=>m.config?.['claim.name']==='given_name');
+ const mapper={name:'given name',protocol:'openid-connect',protocolMapper:'oidc-usermodel-property-mapper',config:{'user.attribute':'firstName','claim.name':'given_name','jsonType.label':'String','id.token.claim':'true','access.token.claim':'true','userinfo.token.claim':'true'}};
+ if(existing&&(existing.protocolMapper!==mapper.protocolMapper||existing.config?.['user.attribute']!=='firstName'))throw Error('Unexpected given_name mapper; no overwrite performed');
+ await request(realm+'/client-scopes/'+profile.id+'/protocol-mappers/models'+(existing?'/'+existing.id:''),existing?'PUT':'POST',{...mapper,...(existing?{id:existing.id}:{})},token);
+ const {Store}=await import('./src/store.mjs'),store=new Store();
+ try{
+  const identities=store.db.prepare('SELECT subject,user_id FROM oidc_identities WHERE issuer=?').all(process.env.OIDC_ISSUER),updates=[];
+  for(const identity of identities){
+   const profile=await request(realm+'/users/'+encodeURIComponent(identity.subject),'GET',null,token);
+   if(profile.id!==identity.subject)throw Error('Identity mismatch');
+   const name=(profile.firstName?.trim()||profile.username?.trim()||'参加者').slice(0,60);
+   updates.push({id:identity.user_id,name});
+  }
+  const changed=store.transaction(()=>{let count=0;for(const row of updates)count+=Number(store.db.prepare('UPDATE users SET display_name=? WHERE id=? AND display_name<>?').run(row.name,row.id,row.name).changes);return count;});
+  console.log('Display names synchronized: '+changed+' / '+updates.length);
+ }finally{store.close();}
+}
 if(c.configureMcp){
  const resource=c.origin+c.basePath+'/mcp';
  const [server]=await request(realm+'/clients?clientId=novel-mcp','GET',null,token);
@@ -66,11 +87,12 @@ for(const u of c.users){
  if(existing.length)await request(realm+'/users/'+created.id+'/reset-password','PUT',{type:'password',value:u.password,temporary:u.temporary},token);
  if(u.member){const role=await request(realm+'/roles/novel-member','GET',null,token);await request(realm+'/users/'+created.id+'/role-mappings/realm','POST',[role],token);}
 }
-console.log(c.configureMcp?'ChatGPT OAuth client configured':c.configure?'Web callback/logout URLs configured':c.disable?'Verification users disabled':'Users created');
+console.log(c.syncDisplayNames?'Display-name sync complete':c.configureMcp?'ChatGPT OAuth client configured':c.configure?'Web callback/logout URLs configured':c.disable?'Verification users disabled':'Users created');
 } catch(e) { console.error(e.message);process.exitCode=1; }
 '''
 p=argparse.ArgumentParser()
 p.add_argument('--configure-mcp',action='store_true');p.add_argument('--chatgpt-callback',default='https://chatgpt.com/connector_platform_oauth_redirect');p.add_argument('--configure-web',action='store_true');p.add_argument('--username');p.add_argument('--display-name');p.add_argument('--email')
+p.add_argument('--sync-display-names',action='store_true')
 p.add_argument('--create-verification',action='store_true');p.add_argument('--disable-verification',action='store_true')
 a=p.parse_args();cfg=envfile('deploy/.env');users=[]
 verify=Path('deploy/.test/public.env')
@@ -86,7 +108,7 @@ if a.configure_mcp:
         cfg['MCP_CHATGPT_CLIENT_SECRET']=secrets.token_urlsafe(48)
         with open('deploy/.env','a') as f:f.write('\nMCP_CHATGPT_CLIENT_SECRET='+cfg['MCP_CHATGPT_CLIENT_SECRET']+'\n')
         Path('deploy/.env').chmod(0o600)
-elif a.configure_web:
+elif a.configure_web or a.sync_display_names:
     pass
 elif a.create_verification:
     verify.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
@@ -98,7 +120,7 @@ elif a.create_verification:
     if fresh:values={'APP_ORIGIN':cfg['APP_ORIGIN'],'TEST_USER_PREFIX':'verify-'+secrets.token_hex(4)+'-'}
     for name in ['member','other','outsider']:
         password=secrets.token_urlsafe(32) if fresh else values['TEST_'+name.upper()+'_PASSWORD'];values['TEST_'+name.upper()+'_PASSWORD']=password
-        users.append(dict(username=values['TEST_USER_PREFIX']+name,display='Test',last=name,email=values['TEST_USER_PREFIX']+name+'@example.invalid',password=password,temporary=False,member=name!='outsider'))
+        users.append(dict(username=values['TEST_USER_PREFIX']+name,display='Test '+name,last=name,email=values['TEST_USER_PREFIX']+name+'@example.invalid',password=password,temporary=False,member=name!='outsider'))
     values['APP_ORIGIN']=cfg['APP_ORIGIN']
     values['APP_BASE_PATH']=cfg.get('APP_BASE_PATH','')
     if fresh:
@@ -113,7 +135,7 @@ else:
     password=getpass.getpass('Initial temporary password (at least 12 characters): ')
     if len(password)<12 or password!=getpass.getpass('Repeat password: '):p.error('Passwords must match and contain at least 12 characters')
     users=[dict(username=a.username,display=a.display_name,email=a.email,password=password,temporary=True,member=True)]
-r=subprocess.run(DC+['exec','-T','app','node','--input-type=module','-e',JS],input=json.dumps(dict(admin=cfg.get('KC_ADMIN_USER','admin'),secret=cfg['KC_ADMIN_PASSWORD'],users=users,disable=a.disable_verification,resume=a.create_verification,configure=a.configure_web,origin=cfg['APP_ORIGIN'],basePath=cfg.get('APP_BASE_PATH',''),configureMcp=a.configure_mcp,callback=a.chatgpt_callback,mcpSecret=cfg.get('MCP_CHATGPT_CLIENT_SECRET'))),text=True,capture_output=True)
+r=subprocess.run(DC+['exec','-T','app','node','--input-type=module','-e',JS],input=json.dumps(dict(admin=cfg.get('KC_ADMIN_USER','admin'),secret=cfg['KC_ADMIN_PASSWORD'],users=users,disable=a.disable_verification,resume=a.create_verification,configure=a.configure_web,origin=cfg['APP_ORIGIN'],basePath=cfg.get('APP_BASE_PATH',''),configureMcp=a.configure_mcp,syncDisplayNames=a.sync_display_names,callback=a.chatgpt_callback,mcpSecret=cfg.get('MCP_CHATGPT_CLIENT_SECRET'))),text=True,capture_output=True)
 if r.returncode:
     message=r.stderr.strip()
     for secret in [cfg['KC_ADMIN_PASSWORD'],cfg.get('MCP_CHATGPT_CLIENT_SECRET','')]+[u.get('password','') for u in users]:

@@ -74,7 +74,7 @@ export class OidcAuth {
       const tokens = await oidc.authorizationCodeGrant(config,url,{expectedState:state,expectedNonce:login.nonce,pkceCodeVerifier:login.verifier,idTokenExpected:true});
       const claims = tokens.claims();
       if (!Array.isArray(claims.roles) || !claims.roles.includes(this.settings.memberRole)) throw new AppError('このサイトへの参加権限がありません。管理者に確認してください。',403);
-      const user = this.store.oidcUser(this.settings.issuer,claims.sub,claims.name || claims.preferred_username || '参加者');
+      const user = this.store.oidcUser(this.settings.issuer,claims.sub,claims.given_name?.trim() || claims.preferred_username?.trim() || '参加者');
       const lifetime = Math.min(900,Math.floor(claims.exp-Date.now()/1000));
       if (lifetime < 1) throw new AppError('認証が期限切れです。再ログインしてください。',401);
       return {...this.store.createSession(user.id,{lifetimeMs:lifetime*1000,authType:'oidc',issuer:this.settings.issuer,subject:claims.sub,sid:claims.sid || null,idToken:tokens.id_token}),maxAge:lifetime};
