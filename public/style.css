@@ -55,3 +55,8 @@ body[data-reader-theme=blue]{--paper:#edf7ff;--surface:#f7fbff;--ink:#24323b;--g
 @media(max-width:550px){.reader-setting-group{margin:16px 0 22px}#reader-settings .reader-choice{min-height:62px}#reader-settings .settings-heading h2{font-size:17px}}
 
 #reader-settings .settings-heading h2{font-size:18px}
+
+/* Small additions live beside metadata or behind an explicit reader action. */
+.toc-meta{flex-wrap:wrap}.character-count{white-space:nowrap}.toc-tools{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.toc-tools .reading-controls{margin:0}.reader-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.comments-panel{border-top:1px solid var(--line);margin:22px 0;padding:12px 0}.comments-panel summary{cursor:pointer;color:var(--muted);font-size:13px;min-height:44px;display:list-item;align-content:center}.comments-panel form{margin:12px 0 24px}.comment{border-top:1px solid var(--line);padding:16px 0}.comment-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.comment .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.comment .delete-comment{margin-left:auto}.comments-panel button{min-height:44px}#reorder-list{padding:0;list-style:none}#reorder-list li{display:flex;align-items:center;gap:6px;margin:8px 0}#reorder-list li span{flex:1;min-width:0;overflow-wrap:anywhere}#copy-text{min-height:45vh}.toc-tools>.meta{margin-right:auto}.comments-panel textarea{background:var(--surface);color:var(--ink)}
+
+.comments-panel [hidden]{display:none}
