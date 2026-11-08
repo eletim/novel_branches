@@ -104,11 +104,11 @@ test('署名・issuer・audience・nonce・期限・参加ロールの不正を�
 test('同じsubの作者情報を維持し、同名やメールでは既存ユーザーと統合しない',async()=>{
   const f=await fixture();try{
     const local=f.store.addUser('alice','同じ名前','local-password');
-    const first=await f.finish(await f.start({name:'同じ名前'})),cookie1=session(first);
+    const first=await f.finish(await f.start({claims:{given_name:'同じ名前',name:'名字 同じ名前'}})),cookie1=session(first);
     const user1=(await (await f.request('/api/me',{cookie:cookie1})).json()).user;
-    const second=await f.finish(await f.start({name:'変更後'})),cookie2=session(second);
+    const second=await f.finish(await f.start({claims:{given_name:'変更後',name:'名字 変更後'}})),cookie2=session(second);
     const user2=(await (await f.request('/api/me',{cookie:cookie2})).json()).user;
-    const third=await f.finish(await f.start({name:'変更後',subject:'member-2'}));
+    const third=await f.finish(await f.start({claims:{given_name:'変更後'},subject:'member-2'}));
     const user3=(await (await f.request('/api/me',{cookie:session(third)})).json()).user;
     assert.equal(user1.id,user2.id);assert.notEqual(user1.id,local.id);assert.notEqual(user2.id,user3.id);assert.equal(user2.display_name,'変更後');
   }finally{await f.close();}
@@ -206,5 +206,14 @@ test('MCPはopenid/offline_accessの追加とscope順序を許可し、read scop
   for(const scopes of ['openid offline_access','openid offline_access novels:reader','offline_access'])assert.equal((await call(scopes)).status,401);
   const metadata=await (await f.request('/../.well-known/oauth-authorization-server/id/realms/novel-branches')).json();
   assert.ok(metadata.scopes_supported.includes('openid'));assert.ok(metadata.scopes_supported.includes('offline_access'));assert.ok(metadata.scopes_supported.includes('novels:read'));
+ }finally{await f.close();}
+});
+
+test('表示名は名→ユーザー名→参加者としフルネームや姓を表示しない',async()=>{
+ const f=await fixture();try{
+  for(const [claims,expected] of [[{given_name:' 名 ',family_name:'姓',name:'姓 名',preferred_username:'handle'},'名'],[{given_name:' ',name:'姓 名',preferred_username:'handle'},'handle'],[{name:'姓 名',family_name:'姓'},'参加者']]){
+   const response=await f.finish(await f.start({claims}));assert.equal(response.status,302);
+   assert.equal((await (await f.request('/api/me',{cookie:session(response)})).json()).user.display_name,expected);
+  }
  }finally{await f.close();}
 });

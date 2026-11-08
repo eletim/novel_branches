@@ -1,3 +1,4 @@
+import { reorderableChapters } from '../public/reading.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -66,7 +67,9 @@ export class Store {
         CREATE TABLE IF NOT EXISTS story_managers(story_id INTEGER NOT NULL REFERENCES stories(id),user_id INTEGER NOT NULL REFERENCES users(id),PRIMARY KEY(story_id,user_id));
         CREATE INDEX IF NOT EXISTS story_managers_user ON story_managers(user_id,story_id);
         INSERT OR IGNORE INTO story_managers(story_id,user_id) SELECT id,author_id FROM stories;
-        PRAGMA user_version=6;`);
+        CREATE TABLE IF NOT EXISTS comments(id INTEGER PRIMARY KEY AUTOINCREMENT,chapter_id INTEGER NOT NULL REFERENCES chapters(id),author_id INTEGER NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+        CREATE INDEX IF NOT EXISTS comments_chapter ON comments(chapter_id,id);
+        PRAGMA user_version=7;`);
     });
   }
   close() { this.db.close(); }
@@ -144,6 +147,7 @@ export class Store {
     return this.db.prepare(`SELECT s.id,s.title,s.summary,s.author_id,s.created_at,s.hidden_from_home,s.main_branch_id,s.revision,s.updated_at,u.display_name author,
       (SELECT COUNT(*) FROM branches b WHERE b.story_id=s.id) branch_count,
       (SELECT COUNT(*) FROM chapters c JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) chapter_count,
+      (SELECT COALESCE(SUM(length(replace(replace(c.body,char(10),''),char(13),''))),0) FROM chapters c JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) character_count,
       (SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id JOIN branches b ON c.branch_id=b.id WHERE b.story_id=s.id) likes
       FROM stories s JOIN users u ON u.id=s.author_id WHERE (? OR s.hidden_from_home=0) AND (instr(s.title,?)>0 OR instr(s.summary,?)>0)
       ORDER BY ${sort === 'popular' ? 'likes DESC,' : ''} s.id DESC LIMIT ? OFFSET ?`).all(includeHidden ? 1 : 0, query, query, limit, offset);
@@ -152,7 +156,8 @@ export class Store {
     const s = this.db.prepare('SELECT s.*,u.display_name author FROM stories s JOIN users u ON u.id=s.author_id WHERE s.id=?').get(id);
     if (!s) throw new AppError('作品が見つかりません。',404);
     s.branches = this.db.prepare(`SELECT b.*,u.display_name author,(SELECT COUNT(*) FROM likes l JOIN chapters c ON l.chapter_id=c.id WHERE c.branch_id=b.id) likes FROM branches b JOIN users u ON u.id=b.author_id WHERE b.story_id=? ORDER BY b.id`).all(id);
-    s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,c.created_at,c.updated_at,c.revision,c.author_id,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
+    s.chapters = this.db.prepare(`SELECT c.id,c.branch_id,c.parent_id,c.title,length(replace(replace(c.body,char(10),''),char(13),'')) character_count,c.created_at,c.updated_at,c.revision,c.author_id,u.display_name author,(SELECT COUNT(*) FROM likes l WHERE l.chapter_id=c.id) likes FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE b.story_id=? ORDER BY c.id`).all(id);
+    s.character_count=s.chapters.reduce((sum,c)=>sum+c.character_count,0);
     if(viewer)s.can_manage=this.canManageStory(viewer,id);
     return s;
   }
@@ -207,7 +212,7 @@ export class Store {
     });
   }
   chapter(id, viewer = 0) {
-    const c = this.db.prepare(`SELECT c.*,b.story_id,b.title branch_title,u.display_name author,(SELECT COUNT(*) FROM likes WHERE chapter_id=c.id) likes,EXISTS(SELECT 1 FROM likes WHERE chapter_id=c.id AND user_id=?) liked FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.id=?`).get(viewer, id);
+    const c = this.db.prepare(`SELECT c.*,length(replace(replace(c.body,char(10),''),char(13),'')) character_count,(SELECT COUNT(*) FROM comments WHERE chapter_id=c.id) comment_count,b.story_id,b.title branch_title,u.display_name author,(SELECT COUNT(*) FROM likes WHERE chapter_id=c.id) likes,EXISTS(SELECT 1 FROM likes WHERE chapter_id=c.id AND user_id=?) liked FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.id=?`).get(viewer, id);
     if (!c) throw new AppError('話が見つかりません。',404);
     c.children = this.db.prepare('SELECT c.id,c.title,c.branch_id,c.parent_id,c.author_id,c.updated_at,c.revision,b.title branch_title,u.display_name author FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.parent_id=? ORDER BY c.id').all(id);
     return c;
@@ -278,6 +283,54 @@ export class Store {
       this.db.prepare('UPDATE chapters SET title=?,body=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?').run(title,body,updatedAt,chapterId,input.expectedRevision);
       return this.chapter(chapterId,userId);
     });
+  }
+  reorder(userId,branchId,input) {
+    return this.transaction(()=>{
+      const branch=this.db.prepare('SELECT * FROM branches WHERE id=?').get(branchId);
+      if(!branch)throw new AppError('分岐が見つかりません。',404);
+      if(!this.canManageStory(userId,branch.story_id))throw new AppError('話数の入れ替えは作品管理者のみ行えます。',403);
+      const path=this.path(branchId),ids=path.map(c=>c.id);
+      if(!Array.isArray(input.expectedPathIds)||JSON.stringify(ids)!==JSON.stringify(input.expectedPathIds))throw new AppError('話の順番が更新されています。最新の目次を読み直してください。',409);
+      const movable=reorderableChapters(this.story(branch.story_id),branchId),allowed=movable.map(c=>c.id),order=input.chapterIds;
+      if(allowed.length<2)throw new AppError('入れ替えられる話がありません。ほかの経路と共有する話は移動できません。',409);
+      if(!Array.isArray(order)||order.length!==allowed.length||new Set(order).size!==order.length||order.some(id=>!allowed.includes(id)))throw new AppError('ほかの経路と共有しない末尾の話だけを入れ替えてください。',409);
+      if(order.every((id,i)=>id===allowed[i]))return this.story(branch.story_id,userId);
+      let parent=movable[0].parent_id;
+      for(const id of order){
+        this.db.prepare('UPDATE chapters SET parent_id=?,revision=revision+1 WHERE id=?').run(parent,id);
+        parent=id;
+      }
+      this.db.prepare('UPDATE branches SET head_id=? WHERE id=?').run(parent,branchId);
+      this.db.prepare("UPDATE stories SET revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(branch.story_id);
+      return this.story(branch.story_id,userId);
+    });
+  }
+  exportBranch(branchId) {
+    const branch=this.db.prepare('SELECT * FROM branches WHERE id=?').get(branchId);
+    if(!branch)throw new AppError('分岐が見つかりません。',404);
+    const story=this.db.prepare('SELECT title FROM stories WHERE id=?').get(branch.story_id);
+    const chapters=this.path(branchId);
+    return {text:[story.title,...chapters.map((c,i)=>`第${i+1}話　${c.title}\n\n${this.chapter(c.id).body}`)].join('\n\n')};
+  }
+  comments(chapterId,{before=0,limit=30}={}) {
+    this.chapter(chapterId);
+    if(!Number.isSafeInteger(before)||before<0||!Number.isSafeInteger(limit)||limit<1||limit>50)throw new AppError('ページ指定が不正です。');
+    const rows=this.db.prepare('SELECT c.*,u.display_name author FROM comments c JOIN users u ON u.id=c.author_id WHERE c.chapter_id=? AND (?=0 OR c.id<?) ORDER BY c.id DESC LIMIT ?').all(chapterId,before,before,limit+1);
+    const hasMore=rows.length>limit;rows.splice(limit);
+    return {comments:rows,nextBefore:hasMore?rows.at(-1).id:null};
+  }
+  addComment(userId,chapterId,input) {
+    this.chapter(chapterId);
+    const value=text(input.body,'コメント',2000);
+    const id=Number(this.db.prepare('INSERT INTO comments(chapter_id,author_id,body) VALUES(?,?,?)').run(chapterId,userId,value).lastInsertRowid);
+    return {id};
+  }
+  deleteComment(userId,id) {
+    const comment=this.db.prepare('SELECT * FROM comments WHERE id=?').get(id);
+    if(!comment)throw new AppError('コメントが見つかりません。',404);
+    if(comment.author_id!==userId)throw new AppError('自分のコメントだけ削除できます。',403);
+    this.db.prepare('DELETE FROM comments WHERE id=?').run(id);
+    return {ok:true};
   }
   like(userId, chapterId, liked) {
     this.chapter(chapterId);

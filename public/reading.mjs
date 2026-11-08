@@ -23,3 +23,15 @@ export function branchForCandidate(story,candidate,currentBranchId) {
   if(own&&branchPath(story,own.id).some(c=>c.id===candidate.id))return own.id;
   return story.branches.find(b=>branchPath(story,b.id).some(c=>c.id===candidate.id))?.id;
 }
+
+// Only an unshared suffix may move: every other reading path stays unchanged.
+export function reorderableChapters(story, branchId) {
+  const path=branchPath(story,branchId),shared=new Set();
+  for(const branch of story.branches)if(branch.id!==Number(branchId)){
+    for(const chapter of branchPath(story,branch.id))shared.add(chapter.id);
+    if(branch.fork_chapter_id)shared.add(branch.fork_chapter_id);
+  }
+  let start=path.length;
+  while(start>0&&path[start-1].branch_id===Number(branchId)&&!shared.has(path[start-1].id))start--;
+  return path.slice(start);
+}
