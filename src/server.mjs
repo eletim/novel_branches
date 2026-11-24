@@ -136,6 +136,7 @@ export function createApp({store = new Store(), mcpToken = process.env.MCP_TOKEN
           if (kind==='branches'&&action==='export'&&req.method==='GET')return send(200,store.exportBranch(id));
           if (req.method === 'PATCH' && !action && kind === 'stories') return send(200,store.updateStory(user.id,id,await body(req)));
           if (req.method === 'GET' && !action && kind === 'stories') return send(200,store.story(id,user.id));
+          if (req.method === 'DELETE' && !action && kind === 'chapters') return send(200,store.deleteChapter(user.id,id,await body(req)));
           if (req.method === 'PATCH' && !action && kind === 'chapters') return send(200,store.edit(user.id,id,await body(req)));
           if (req.method === 'POST' && kind === 'chapters' && action === 'alternate') return send(201,store.alternate(user.id,id,await body(req)));
           if (req.method === 'GET' && !action && kind === 'chapters') return send(200,store.chapter(id,user.id));

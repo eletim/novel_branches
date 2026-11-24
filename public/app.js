@@ -130,12 +130,29 @@ async function chapterView(id,generation,params) {
   bindComments(c,generation);
   $('#open-editor').onclick=()=>{
     closeReaderSettings(false);
-    dialog.innerHTML=`<div class="dialog-head"><h2>執筆</h2><button class="quiet icon-button" id="close-editor" title="閉じる" aria-label="閉じる">✕</button></div><div class="editor-menu">${c.author_id===user.id?'<button id="edit-chapter" class="secondary">この話の編集</button>':''}${branch.head_id===c.id?'<button id="append" class="secondary">次の話の追加</button>':''}<button id="alternate" class="secondary">この話の別案</button><button id="fork" class="secondary">次の話から分岐</button></div><p class="hint">編集はこの話の制作者のみ。続話・別案・分岐は参加者なら追加できます。途中の話から続きを作る場合は「次の話から分岐」を選んでください。</p>`;
+    dialog.innerHTML=`<div class="dialog-head"><h2>執筆</h2><button class="quiet icon-button" id="close-editor" title="閉じる" aria-label="閉じる">✕</button></div><div class="editor-menu">${c.author_id===user.id?'<button id="edit-chapter" class="secondary">この話の編集</button>':''}${branch.head_id===c.id?'<button id="append" class="secondary">次の話の追加</button>':''}<button id="alternate" class="secondary">この話の別案</button><button id="fork" class="secondary">次の話から分岐</button>${c.author_id===user.id?'<button id="delete-chapter" class="quiet danger-text">この話を削除</button>':''}</div><p class="hint">編集はこの話の制作者のみ。続話・別案・分岐は参加者なら追加できます。途中の話から続きを作る場合は「次の話から分岐」を選んでください。</p>`;
     $('#close-editor').onclick=()=>dialog.close();
+    if($('#delete-chapter'))$('#delete-chapter').onclick=()=>deleteChapterDialog(c,story);
     for(const [selector,mode,context] of [['#edit-chapter','edit',c],['#append','append',branch],['#alternate','alternate',c],['#fork','fork',c]])if($(selector))$(selector).onclick=()=>editor(mode,context,branch.id);
     dialog.showModal();
   };
   $('#like').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const updated=await api(`/chapters/${c.id}/like`,'PUT',{liked:!c.liked});c.liked=updated.liked;button.textContent=`${c.liked?'♥':'♡'} グッド ${updated.likes}`;button.className=c.liked?'quiet liked':'quiet';button.setAttribute('aria-pressed',!!c.liked);}catch(err){toast(err.message);}finally{button.disabled=false;}};
+}
+function deleteChapterDialog(chapter,story) {
+  const deletingUserId=user.id,deletion=chapter.deletion;
+  dialog.close();
+  dialog.innerHTML=`<div class="dialog-head"><h2>この話を削除</h2><button class="quiet icon-button" id="close-delete" aria-label="閉じる">×</button></div><p class="delete-title">${esc(chapter.title)}</p>${deletion?.allowed?`<p>この話のタイトル・本文・グッド・コメントを削除します。元に戻すことはできません。</p>${deletion.removesStory?'<p><strong>作品に残っている最後の一話です。作品名・あらすじ・設定メモを含む作品全体も削除されます。</strong></p>':deletion.removesBranch?'<p>この話だけの経路も削除されます。ほかの経路の話は残ります。</p>':''}<form id="delete-chapter-form"><label class="delete-ack"><input type="checkbox" id="delete-ack" required> 削除する内容を確認しました</label><div class="form-actions"><button type="button" class="secondary" id="cancel-delete">キャンセル</button><button type="submit" class="danger-button">削除する</button></div><p class="error" role="alert"></p></form>`:`<p role="status">${esc(deletion?.reason||'最新の内容を読み直してください。')}</p><button class="secondary" id="cancel-delete">閉じる</button>`}`;
+  $('#close-delete').onclick=$('#cancel-delete').onclick=()=>dialog.close();
+  const form=$('#delete-chapter-form');
+  if(form)form.onsubmit=async e=>{
+    e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;form.querySelector('.error').textContent='';
+    try{
+      const result=await api('/chapters/'+chapter.id,'DELETE',{expectedRevision:chapter.revision,expectedStoryRevision:story.revision},deletingUserId);
+      try{localStorage.removeItem(`novel-branches:draft:${deletingUserId}:edit:${chapter.id}`);localStorage.removeItem(`novel-branches:draft:${deletingUserId}:comment:${chapter.id}`);}catch{}
+      dialog.close();toast('話を削除しました。');location.hash=result.storyId?`#story/${result.storyId}?branch=${result.branchId}`:'#';
+    }catch(err){form.querySelector('.error').textContent=err.message;}finally{button.disabled=false;}
+  };
+  dialog.showModal();$('#cancel-delete').focus();
 }
 async function copyText(load) {
   let value;

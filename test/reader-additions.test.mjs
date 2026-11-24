@@ -58,7 +58,7 @@ test('コメントは話に属しカーソルでページ送り、本人のみ�
  const p=s.comments(r.chapterId);assert.equal(p.comments.length,30);assert.equal(s.comments(r.chapterId,{before:p.nextBefore}).comments.length,2);assert.equal(s.comments(second.chapterId).comments.length,0);
  assert.throws(()=>s.deleteComment(a.id,p.comments[0].id),e=>e.status===403);
  s.deleteComment(b.id,p.comments[0].id);s.close();s=new Store(join(dir,'db'));
- assert.equal(s.chapter(r.chapterId).comment_count,31);assert.equal(s.db.prepare('PRAGMA user_version').get().user_version,7);
+ assert.equal(s.chapter(r.chapterId).comment_count,31);assert.equal(s.db.prepare('PRAGMA user_version').get().user_version,8);
  assert.throws(()=>s.comments(r.chapterId,{before:-1}));assert.throws(()=>s.addComment(a.id,9999,{body:'不存在'}),e=>e.status===404);
  }finally{s.close();rmSync(dir,{recursive:true,force:true});}
 });

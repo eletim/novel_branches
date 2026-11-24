@@ -69,10 +69,17 @@ export class Store {
         INSERT OR IGNORE INTO story_managers(story_id,user_id) SELECT id,author_id FROM stories;
         CREATE TABLE IF NOT EXISTS comments(id INTEGER PRIMARY KEY AUTOINCREMENT,chapter_id INTEGER NOT NULL REFERENCES chapters(id),author_id INTEGER NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
         CREATE INDEX IF NOT EXISTS comments_chapter ON comments(chapter_id,id);
-        PRAGMA user_version=7;`);
+        CREATE TABLE IF NOT EXISTS retired_ids(kind TEXT NOT NULL,id INTEGER NOT NULL,PRIMARY KEY(kind,id));
+        PRAGMA user_version=8;`);
     });
   }
   close() { this.db.close(); }
+  nextContentId(kind) {
+    if(!['stories','branches','chapters'].includes(kind))throw Error('Unknown content table');
+    // Keep old URLs and stale editing forms from ever targeting replacement content.
+    return this.db.prepare(`SELECT COALESCE(MAX(id),0)+1 id FROM (SELECT MAX(id) id FROM ${kind} UNION ALL SELECT MAX(id) id FROM retired_ids WHERE kind=?)`).get(kind).id;
+  }
+  retireId(kind,id) { this.db.prepare('INSERT INTO retired_ids(kind,id) VALUES(?,?)').run(kind,id); }
   transaction(fn) {
     this.db.exec('BEGIN IMMEDIATE');
     try { const result = fn(); this.db.exec('COMMIT'); return result; }
@@ -215,6 +222,7 @@ export class Store {
     const c = this.db.prepare(`SELECT c.*,length(replace(replace(c.body,char(10),''),char(13),'')) character_count,(SELECT COUNT(*) FROM comments WHERE chapter_id=c.id) comment_count,b.story_id,b.title branch_title,u.display_name author,(SELECT COUNT(*) FROM likes WHERE chapter_id=c.id) likes,EXISTS(SELECT 1 FROM likes WHERE chapter_id=c.id AND user_id=?) liked FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.id=?`).get(viewer, id);
     if (!c) throw new AppError('話が見つかりません。',404);
     c.children = this.db.prepare('SELECT c.id,c.title,c.branch_id,c.parent_id,c.author_id,c.updated_at,c.revision,b.title branch_title,u.display_name author FROM chapters c JOIN branches b ON b.id=c.branch_id JOIN users u ON u.id=c.author_id WHERE c.parent_id=? ORDER BY c.id').all(id);
+    if(viewer)c.deletion=this.chapterDeletion(c,viewer);
     return c;
   }
   path(branchId) {
@@ -231,9 +239,9 @@ export class Store {
     const title = text(input.title, '作品名', 120), summary = text(input.summary || '', 'あらすじ', 2000, 0);
     const chapterTitle = text(input.chapterTitle, '話のタイトル', 120), body = text(input.body, '本文', 100000);
     return this.transaction(() => {
-      const s = this.db.prepare('INSERT INTO stories(title,summary,author_id) VALUES(?,?,?)').run(title,summary,userId);
+      const s = this.db.prepare('INSERT INTO stories(id,title,summary,author_id) VALUES(?,?,?,?)').run(this.nextContentId('stories'),title,summary,userId);
       const storyId = Number(s.lastInsertRowid);
-      const b = this.db.prepare('INSERT INTO branches(story_id,title,author_id) VALUES(?,?,?)').run(storyId, '本編',userId);
+      const b = this.db.prepare('INSERT INTO branches(id,story_id,title,author_id) VALUES(?,?,?,?)').run(this.nextContentId('branches'),storyId, '本編',userId);
       const branchId = Number(b.lastInsertRowid);
       this.db.prepare('UPDATE stories SET main_branch_id=?,updated_at=created_at WHERE id=?').run(branchId,storyId);
       this.db.prepare('INSERT INTO story_managers(story_id,user_id) VALUES(?,?)').run(storyId,userId);
@@ -242,7 +250,7 @@ export class Store {
     });
   }
   insertChapter(branchId, parent, title, body, userId) {
-    const id = Number(this.db.prepare('INSERT INTO chapters(branch_id,parent_id,title,body,author_id,updated_at) VALUES(?,?,?,?,?,strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))').run(branchId,parent,title,body,userId).lastInsertRowid);
+    const id = Number(this.db.prepare('INSERT INTO chapters(id,branch_id,parent_id,title,body,author_id,updated_at) VALUES(?,?,?,?,?,?,strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))').run(this.nextContentId('chapters'),branchId,parent,title,body,userId).lastInsertRowid);
     this.db.prepare('UPDATE branches SET head_id=? WHERE id=?').run(id, branchId);
     return id;
   }
@@ -259,7 +267,7 @@ export class Store {
     const branchTitle = text(input.branchTitle || ('分岐：'+String(input.title||'')).slice(0,120), '分岐名',120), title = text(input.title,'話のタイトル',120), body = text(input.body,'本文',100000);
     return this.transaction(() => {
       const source = this.chapter(chapterId);
-      const branchId = Number(this.db.prepare('INSERT INTO branches(story_id,title,author_id,fork_chapter_id) VALUES(?,?,?,?)').run(source.story_id,branchTitle,userId,chapterId).lastInsertRowid);
+      const branchId = Number(this.db.prepare('INSERT INTO branches(id,story_id,title,author_id,fork_chapter_id) VALUES(?,?,?,?,?)').run(this.nextContentId('branches'),source.story_id,branchTitle,userId,chapterId).lastInsertRowid);
       return { storyId: source.story_id, branchId, chapterId: this.insertChapter(branchId,chapterId,title,body,userId) };
     });
   }
@@ -267,7 +275,7 @@ export class Store {
     const title=text(input.title,'話のタイトル',120),body=text(input.body,'本文',100000);
     return this.transaction(()=>{
       const source=this.chapter(chapterId);
-      const branchId=Number(this.db.prepare('INSERT INTO branches(story_id,title,author_id,fork_chapter_id) VALUES(?,?,?,?)').run(source.story_id,('別案：'+title).slice(0,120),userId,source.parent_id).lastInsertRowid);
+      const branchId=Number(this.db.prepare('INSERT INTO branches(id,story_id,title,author_id,fork_chapter_id) VALUES(?,?,?,?,?)').run(this.nextContentId('branches'),source.story_id,('別案：'+title).slice(0,120),userId,source.parent_id).lastInsertRowid);
       return {storyId:source.story_id,branchId,chapterId:this.insertChapter(branchId,source.parent_id,title,body,userId)};
     });
   }
@@ -282,6 +290,45 @@ export class Store {
       const updatedAt=new Date(Math.max(Date.now(),Date.parse(chapter.updated_at)+1)).toISOString();
       this.db.prepare('UPDATE chapters SET title=?,body=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?').run(title,body,updatedAt,chapterId,input.expectedRevision);
       return this.chapter(chapterId,userId);
+    });
+  }
+  chapterDeletion(chapter,userId) {
+    const denied=reason=>({allowed:false,reason});
+    if(chapter.author_id!==userId)return denied('削除できるのは、この話の制作者だけです。');
+    if(this.db.prepare('SELECT 1 FROM chapters WHERE parent_id=? LIMIT 1').get(chapter.id)||
+      this.db.prepare('SELECT 1 FROM branches WHERE fork_chapter_id=? OR (head_id=? AND id<>?) LIMIT 1').get(chapter.id,chapter.id,chapter.branch_id))return denied('続話や分岐につながる話は削除できません。');
+    const branch=this.db.prepare('SELECT * FROM branches WHERE id=?').get(chapter.branch_id);
+    if(branch.head_id!==chapter.id)return denied('この経路の最後の話だけ削除できます。');
+    const removesBranch=this.db.prepare('SELECT COUNT(*) n FROM chapters WHERE branch_id=?').get(branch.id).n===1;
+    const story=this.db.prepare('SELECT * FROM stories WHERE id=?').get(branch.story_id);
+    const removesStory=removesBranch&&this.db.prepare('SELECT COUNT(*) n FROM branches WHERE story_id=?').get(story.id).n===1;
+    if(removesBranch&&!removesStory&&story.main_branch_id===branch.id)return denied('別の経路がある作品では、本編の最後の一話は削除できません。');
+    if(removesStory&&story.author_id!==userId)return denied('作品全体がなくなる最後の一話は、作品の最初の制作者だけ削除できます。');
+    return {allowed:true,removesBranch,removesStory};
+  }
+  deleteChapter(userId,id,input) {
+    return this.transaction(()=>{
+      const chapter=this.chapter(id);
+      if(chapter.author_id!==userId)throw new AppError('削除できるのは、この話の制作者だけです。',403);
+      if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<1)throw new AppError('削除する話の版を指定してください。');
+      if(input.expectedRevision!==chapter.revision)throw new AppError('この話は更新されています。最新の内容を確認してから削除してください。',409);
+      const deletion=this.chapterDeletion(chapter,userId);
+      if(!deletion.allowed)throw new AppError(deletion.reason,409);
+      const story=this.db.prepare('SELECT * FROM stories WHERE id=?').get(chapter.story_id);
+      if(deletion.removesStory&&input.expectedStoryRevision!==story.revision)throw new AppError('作品情報が更新されています。最新の内容を確認してから削除してください。',409);
+      // All reference checks and removals share one write transaction; a concurrent
+      // continuation, alternative or reorder cannot slip between them.
+      this.db.prepare('UPDATE branches SET head_id=? WHERE id=?').run(deletion.removesBranch?null:chapter.parent_id,chapter.branch_id);
+      this.db.prepare('DELETE FROM likes WHERE chapter_id=?').run(id);
+      this.db.prepare('DELETE FROM comments WHERE chapter_id=?').run(id);
+      this.db.prepare('DELETE FROM chapters WHERE id=?').run(id);this.retireId('chapters',id);
+      if(deletion.removesStory)this.db.prepare('UPDATE stories SET main_branch_id=NULL WHERE id=?').run(story.id);
+      if(deletion.removesBranch){this.db.prepare('DELETE FROM branches WHERE id=?').run(chapter.branch_id);this.retireId('branches',chapter.branch_id);}
+      if(deletion.removesStory){
+        this.db.prepare('DELETE FROM story_managers WHERE story_id=?').run(story.id);
+        this.db.prepare('DELETE FROM stories WHERE id=?').run(story.id);this.retireId('stories',story.id);
+      }else this.db.prepare("UPDATE stories SET revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(story.id);
+      return {deletedChapterId:id,storyId:deletion.removesStory?null:story.id,branchId:deletion.removesStory?null:deletion.removesBranch?story.main_branch_id:chapter.branch_id};
     });
   }
   reorder(userId,branchId,input) {

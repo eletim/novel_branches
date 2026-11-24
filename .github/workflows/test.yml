@@ -42,6 +42,8 @@ jobs:
         run: CHROME_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")" npm run test:browser
       - name: Reader additions browser regression
         run: node scripts/test-reader-additions.mjs
+      - name: Chapter deletion browser regression
+        run: node scripts/test-delete-chapter.mjs
       - name: Verify access logs omit authentication queries
         run: |
           docker compose --project-name novel-branches-test --env-file deploy/.test/stack.env -f deploy/compose.public.yaml logs nginx | python3 -c "import sys; logs=sys.stdin.read(); assert '/auth/callback?' not in logs; assert 'id_token_hint=' not in logs; print('Access log query check passed')"
